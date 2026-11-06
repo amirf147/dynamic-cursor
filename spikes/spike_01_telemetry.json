@@ -1,0 +1,80 @@
+{
+  "baseline": {
+    "os_platform": "Windows-10-10.0.26300-SP0",
+    "python_version": "3.10.11",
+    "sm_cxcursor": 32,
+    "sm_cycursor": 32,
+    "display_adapter": "Intel(R) UHD Graphics",
+    "display_driver_version": "32.0.101.6129",
+    "discrete_adapter": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "display_resolution": "1920 x 1200 x 4294967296 colors",
+    "refresh_rate": "144 Hz"
+  },
+  "creation_latency_us": {
+    "32": {
+      "mean": 105.319,
+      "p50": 95.8,
+      "p95": 157.2,
+      "min": 86.5,
+      "max": 378.1
+    },
+    "64": {
+      "mean": 162.764,
+      "p50": 154.7,
+      "p95": 217.9,
+      "min": 136.2,
+      "max": 333.2
+    },
+    "128": {
+      "mean": 376.677,
+      "p50": 362.0,
+      "p95": 507.2,
+      "min": 322.7,
+      "max": 728.1
+    },
+    "256": {
+      "mean": 988.515,
+      "p50": 977.5,
+      "p95": 1151.9,
+      "min": 900.3,
+      "max": 1186.8
+    }
+  },
+  "swap_latency_us": {
+    "32": {
+      "mean": 40.726,
+      "p50": 39.9,
+      "p95": 48.3,
+      "min": 38.3,
+      "max": 69.2
+    },
+    "64": {
+      "mean": 51.431,
+      "p50": 45.8,
+      "p95": 81.4,
+      "min": 43.5,
+      "max": 226.8
+    },
+    "128": {
+      "mean": 75.53,
+      "p50": 69.4,
+      "p95": 128.3,
+      "min": 65.8,
+      "max": 186.8
+    },
+    "256": {
+      "mean": 316.456,
+      "p50": 343.4,
+      "p95": 500.3,
+      "min": 187.6,
+      "max": 2153.4
+    }
+  },
+  "animation_latency_us": {
+    "mean": 51.86666666666667,
+    "p50": 48.6,
+    "p95": 82.0,
+    "min": 46.7,
+    "max": 82.0
+  }
+}

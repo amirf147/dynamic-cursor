@@ -17,13 +17,18 @@ All documents in this repository are living documents. Technical assumptions, re
 
 ### Documentation Index
 - **Architecture**:
-  - [System Architecture](architecture/01_system_architecture.md): Decoupled feeder-to-sink model, state priority compositor, and dual rendering paths.
-  - [Win32 Subsystem Deep Dive](architecture/02_win32_subsystem_deep_dive.md): In-memory bitmap composition (`CreateIconIndirect`), hardware cursor plane size limits, and extended companion overlay mechanics.
+  - [System Architecture](architecture/01_system_architecture.md): Decoupled feeder-to-sink model, state priority compositor, dual rendering paths, and native C++20 dual-target architecture.
+  - [Win32 Subsystem Deep Dive](architecture/02_win32_subsystem_deep_dive.md): In-memory bitmap composition (`CreateIconIndirect`), hardware cursor plane size limits, companion overlay mechanics (Mode A and Mode B), and `user32!SetCursor` interception.
+- **Empirical Spikes & Telemetry**:
+  - [Spike 01: Hardware Cursor Canvas & Latency](spikes/report_01_hardware_canvas.md): Validates `64x64` / `128x128` hardware canvas fidelity, sub-55 us cached swap latency, and 15-frame progress bar animation.
+  - [Spike 02: Companion Overlay Architecture](spikes/report_02_companion_overlay.md): Evaluates Mode A (Spawn-Anchored Toast, 0.35 ms median spawn) vs Mode B (Raw Input Follower, 74 us repositioning) and proves focus preservation and click-through invariants.
+  - [Spike 03: Named Pipe Leases & State Compositor](spikes/report_03_named_pipe_leases.md): Benchmarks length-prefixed IPC throughput (21,768 msg/s, 25 us latency) and proves 940 us kernel lease rollback on process crash.
+  - [Spike 04: Native C++20 Toolchain & Windhawk](spikes/report_04_native_toolchain.md): Host compiler discovery (MSVC 19.50, WinSDK 10.0.26100, Windhawk Clang 20.1), binary footprint (256 KB .exe, 1.33 MB private working set), and Windhawk mod interception mapping.
 - **Requirements**:
   - [Living Requirements](requirements/living_requirements.md): Functional and non-functional requirements, feeder integration stories, and acceptance criteria.
   - [Prior Art & Web Audit](requirements/prior_art_audit.md): Comparative analysis of existing open-source cursor changers, PowerToys overlays, and historical failure modes.
 - **Roadmap & Explorations**:
-  - [Living Roadmap](roadmap/living_roadmap.md): Near-term discovery spikes, upcoming tasks, and open architectural questions.
+  - [Living Roadmap](roadmap/living_roadmap.md): Phase 1 empirical completion metrics, Phase 2 native C++20 implementation tasks, and exploratory vision queue.
   - [Exploratory Vision](roadmap/exploratory_vision.md): Deep dive into C/C++ native packaging, Windhawk mod distribution, and procedural cursor capabilities.
 
 ---
@@ -76,9 +81,9 @@ classDiagram
 ### Domain Definitions
 - **Cursor Sink (Actuator)**: The core `dynamic-cursor` process. It has zero knowledge of external applications and strictly renders the composite result of active state layers.
 - **External Feeder (Producer)**: Any external process (Active Desktop Context Engine, Caster, CLI script) that connects to `\\.\pipe\dynamic_cursor` to assert or clear visual state layers.
-- **Connection Lease**: Kernel-tracked lifetime binding between an external feeder's open pipe handle and its asserted cursor layers. If the feeder process crashes or exits, its layers are automatically purged.
-- **Hardware Cursor Canvas**: A 32-bit pre-multiplied ARGB bitmap (`32x32` up to `128x128` pixels) created in memory via `CreateDIBSection` and `CreateIconIndirect`, rendered directly by the GPU hardware cursor plane with zero motion lag.
-- **Extended Companion Area**: An on-demand, click-through Direct2D / Layered window (`WS_EX_LAYERED | WS_EX_TRANSPARENT`) spawned near the pointer only when visual elements exceed hardware cursor canvas dimensions (such as multi-word text notifications or expanded progress bars).
+- **Connection Lease**: Kernel-tracked lifetime binding between an external feeder's open pipe handle and its asserted cursor layers. If the feeder process crashes or exits, the Windows Object Manager closes the handle table, signaling `ERROR_BROKEN_PIPE` in under 1.0 ms (empirically 940 us) to automatically purge all associated layers.
+- **Hardware Cursor Canvas**: A 32-bit pre-multiplied ARGB bitmap standardized at `64x64` pixels (and expandable to `128x128`) created in memory via `CreateDIBSection` and `CreateIconIndirect`. Rendered directly by the GPU hardware cursor plane with zero motion lag and sub-55 us cached swap latency.
+- **Extended Companion Area**: An on-demand, click-through Layered / DirectComposition window (`WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE`) spawned near the pointer only when visual elements exceed hardware cursor canvas dimensions (such as multi-word text notifications or expanded progress bars). Operates via Mode A (Spawn-Anchored Toast, 0% hooks, 0.0% CPU when holding) or Mode B (On-Demand Raw Input Follower, 74 us repositioning, 0% lingering hooks).
 
 ---
 
