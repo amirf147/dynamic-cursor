@@ -5,14 +5,12 @@
 
 ## 1. Roadmap Philosophy: Discovery-Driven Horizon
 
-This roadmap focuses intentionally on **near-term empirical validation spikes** rather than rigid long-range milestones. Because low-level Win32/WDDM behaviors (such as the maximum hardware cursor bitmap size before software fallback and the ergonomics of on-demand companion windows) directly affect the core engine design, findings from Phase 1 will determine the exact structure of subsequent phases.
+This roadmap balances near-term empirical validation spikes with incremental production deliverables. Low-level Win32 and WDDM behaviors empirically validated in Phase 1 established the technical boundaries for the Phase 2 production C++20 core engine.
 
 ```mermaid
 flowchart LR
-    P1["Phase 1: Empirical Discovery Spikes"] --> GATE{"Architecture Decision Gate"}
-    GATE --> P2A["Path A: Expanded Hardware Canvas Engine"]
-    GATE --> P2B["Path B: Hybrid Hardware + Companion HUD"]
-    GATE --> P2C["Packaging: Native C++ Tray & Windhawk Mod"]
+    P1["Phase 1: Empirical Discovery Spikes\n(COMPLETED)"] --> P2["Phase 2: Production C++20 Core & Dual Targets\n(COMPLETED)"]
+    P2 --> P3["Phase 3: Procedural Animation & DPI Scaling\n(CURRENT HORIZON)"]
 ```
 
 ---
@@ -27,7 +25,7 @@ All Phase 1 discovery spikes have been empirically executed and validated on nat
   - **Report**: [docs/spikes/report_01_hardware_canvas.md](../spikes/report_01_hardware_canvas.md).
 
 - [x] **Spike 1.2: Hardware Cursor Canvas Size Ceiling (`64x64`, `128x128`, `256x256`)**
-  - **Empirical Metric**: Windows 11 and WDDM 3.x allocate exact requested dimensions at 32 bpp ARGB without downscaling or cropping. Reading back pixels via `GetDIBits` from `LoadCursorW(None, OCR_NORMAL)` verified pixel fidelity at both hotspot `(0, 0)` and the extreme corner `(W - 1, H - 1)`.
+  - **Empirical Metric**: Windows 11 and WDDM 3.x allocate exact requested dimensions at 32 bpp ARGB without downscaling or cropping. Reading back pixels via `GetDIBits` from `LoadCursorW(nullptr, OCR_NORMAL)` verified pixel fidelity at both hotspot `(0, 0)` and the extreme corner `(W - 1, H - 1)`.
   - **Architectural Decision**: Tier 1 standardizes on a `64x64` canvas (with `128x128` available for wide badges). A `64x64` canvas provides ample room for the primary arrow pointer, a `56x6` progress bar beneath the arrow, and a corner badge while consuming only 0.74% of the frame interval on a 144 Hz display panel (6.94 ms frame period).
   - **Report**: [docs/spikes/report_01_hardware_canvas.md](../spikes/report_01_hardware_canvas.md).
 
@@ -44,47 +42,51 @@ All Phase 1 discovery spikes have been empirically executed and validated on nat
 
 - [x] **Spike 1.5: Native C++20 Toolchain & Windhawk Architecture**
   - **Empirical Metric**: Host reconnaissance identified MSVC 19.50 (`cl.exe`), Windows 11 SDK `10.0.26100.0`, CMake 3.31, Ninja 1.12, and Windhawk v1.5 with Clang 20.1. Minimal C++20 Win32 cursor generation benchmark compiled to 262 KB with MSVC, consuming 1.33 MB private working set with 42.56 us handle cycle latency (~23,000 cycles/sec).
-  - **Architectural Decision**: Adopt a shared C++20 core engine supporting dual distribution targets: a standalone system tray daemon (`dynamic-cursor-tray.exe`, ~256 KB) and a Windhawk mod (`dynamic-cursor.wh.cpp`) intercepting `SetCursor` in `user32.dll` via `Wh_SetFunctionHook` for apps that override `OCR_NORMAL`.
+  - **Architectural Decision**: Adopt a shared C++20 core engine supporting dual distribution targets: a standalone system tray daemon (`dynamic-cursor-tray.exe`) and a Windhawk mod (`dynamic-cursor.wh.cpp`) intercepting `SetCursor` in `user32.dll` via `Wh_SetFunctionHook` for apps that override `OCR_NORMAL`.
   - **Report**: [docs/spikes/report_04_native_toolchain.md](../spikes/report_04_native_toolchain.md).
 
 ---
 
-## 3. Phase 2 Implementation Tasks (Native C++20 Architecture)
+## 3. Phase 2: Production C++20 Implementation Tasks (COMPLETED)
 
-With low-level Win32 boundaries empirically established, Phase 2 implements the production native engine:
+All Phase 2 implementation tasks have been completed and verified across native unit test and integration suites:
 
-- [ ] **Task 2.1: Wire Protocol & Framing Specification**
-  - Finalize length-prefixed protocol: 4-byte unsigned 32-bit little-endian length prefix + UTF-8 payload.
-  - Implement a compact 32-byte binary struct option for high-frequency channels (`base_shape`, `tint_rgba`, `corner_badge`, `progress_bar`), preserving JSON formatting for extended toast payloads.
-- [ ] **Task 2.2: Shared Native C++20 Core Engine**
-  - Scaffold `src/core/` using CMake 3.31 and Ninja with MSVC 19.50 (`/std:c++20 /O2 /EHsc /W4 /permissive- /utf-8`).
-  - Implement Win32 I/O Completion Port (IOCP) Named Pipe server at `\\.\pipe\dynamic_cursor` with security descriptor restricting access to the active user session.
-  - Implement Multi-Channel Priority Compositor with atomic state re-evaluation on client handle teardown (`ERROR_BROKEN_PIPE`).
-  - Implement in-memory 32-bit pre-multiplied ARGB DIBSection compositor with RAII handle wrappers and an LRU cache of master `HCURSOR` handles keyed by composite state hash.
-- [ ] **Task 2.3: Dual-Tier Rendering Backend**
-  - Tier 1: Hardware cursor plane driver managing `64x64` canvases via `CopyIcon` + `SetSystemCursor(OCR_NORMAL)`.
-  - Tier 2: Companion overlay driver hosting Mode A (Spawn-Anchored Toast, 0.35 ms spawn, 0 hooks) and on-demand Mode B (Raw Input Follower via `RIDEV_INPUTSINK` / `RIDEV_REMOVE`).
-- [ ] **Task 2.4: Standalone System Tray Daemon (`dynamic-cursor-tray.exe`)**
-  - Implement lightweight WinMain message pump and system tray icon (`Shell_NotifyIcon`) supporting pause/resume toggling, diagnostic inspection, and clean exit.
-  - Register console control handlers (`SetConsoleCtrlHandler`) and exit hooks calling `SPI_SETCURSORS` to guarantee cursor scheme restoration.
-- [ ] **Task 2.5: Windhawk Mod Package (`dynamic-cursor.wh.cpp`)**
-  - Package shared core as a Windhawk mod compiling under bundled Clang 20.1 with `windhawk_api.h`.
-  - Implement `Wh_SetFunctionHook` for `user32!SetCursor` to intercept application-specific cursors that override global system slots during `WM_SETCURSOR`.
-- [ ] **Task 2.6: Production Feeder Bridges**
-  - Author the lightweight Caster voice hook integration (`EngineModesManager.add_mic_listener` pipe writer).
-  - Define integration endpoint for the Active Desktop Context Engine.
+- [x] **Task 2.1: Wire Protocol & Framing Specification**
+  - **Empirical Result**: Length-prefixed framing (4-byte little-endian length prefix) and packed 32-byte binary struct (`BinaryPacket`) verified in `tests/test_native_core.cpp` (Test 1). Embedded JSON parser (`json_internal::MiniParser`) deserializes color tokens, badges, shapes, progress ratios, and toasts with zero external dependencies.
+  - **Specification**: [`docs/architecture/03_ipc_wire_protocol_and_sdk.md`](../architecture/03_ipc_wire_protocol_and_sdk.md).
+
+- [x] **Task 2.2: Shared Native C++20 Core Engine**
+  - **Empirical Result**: Compiled with CMake 3.31, Ninja, and MSVC 19.50 using `/std:c++20 /O2 /GL /LTCG`. Asynchronous overlapped Named Pipe server (`IpcServer`), Multi-Channel Priority Compositor (`CursorStateCompositor`), in-memory ARGB DIBSection compositor (`BitmapCompositor`), and RAII handle wrappers (`raii_handles.hpp`) verified in `tests/test_native_core.cpp` (Tests 1, 2, 4, 6).
+  - **Sources**: [`src/core/include/`](../../src/core/include/).
+
+- [x] **Task 2.3: Dual-Tier Rendering Backend**
+  - **Empirical Result**: Tier 1 `HardwareCursorDriver` manages `64x64` canvases with an LRU cache of 64 master handles, verifying sub-55 us cached swap latency and handle duplication safety via `duplicate_cursor_for_system`. Tier 2 `CompanionOverlay` implements Mode A (Spawn-Anchored Toast) and Mode B (`RIDEV_INPUTSINK` follower) with `WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE` window styles verified in `tests/test_native_core.cpp` (Tests 3, 5).
+  - **Sources**: [`src/core/include/hardware_driver.hpp`](../../src/core/include/hardware_driver.hpp), [`src/core/include/companion_overlay.hpp`](../../src/core/include/companion_overlay.hpp).
+
+- [x] **Task 2.4: Standalone System Tray Daemon (`dynamic-cursor-tray.exe`)**
+  - **Empirical Result**: Compact 96 KB native executable consuming 1.64 MB private working set during active named pipe streaming. Implements WinMain message pump, system tray notification icon (`Shell_NotifyIcon`), single-instance mutex (`Local\DynamicCursorSingleInstanceMutex`), and fail-safe recovery via `perform_system_restoration()` calling `SPI_SETCURSORS`. Verified in `tests/test_e2e_daemon.py::test_native_daemon_e2e`.
+  - **Source**: [`src/daemon/main.cpp`](../../src/daemon/main.cpp).
+
+- [x] **Task 2.5: Windhawk Mod Package (`dynamic-cursor.wh.cpp`)**
+  - **Empirical Result**: Standalone Windhawk mod compiling under bundled Clang 20.1 targeting MinGW-w64 with `windhawk_api.h`. Detours `user32!SetCursor` using `Wh_SetFunctionHook` to maintain composite states inside applications that override system cursors during `WM_SETCURSOR`.
+  - **Source & Documentation**: [`src/windhawk/dynamic-cursor.wh.cpp`](../../src/windhawk/dynamic-cursor.wh.cpp), [`src/windhawk/README.md`](../../src/windhawk/README.md).
+
+- [x] **Task 2.6: Production Feeder Bridges**
+  - **Empirical Result**: Implemented Python feeder SDK (`DynamicCursorClient` in `src/dynamic_cursor/client.py`), CLI subcommands (`python -m dynamic_cursor.client`), Caster voice engine integration (`examples/caster_mic_feeder.py`), and build task notifier (`examples/cli_notify.py`). All 8 end-to-end integration tests passed in `tests/test_e2e_daemon.py`.
+  - **Sources**: [`src/dynamic_cursor/client.py`](../../src/dynamic_cursor/client.py), [`examples/`](../../examples/).
 
 ---
 
-## 4. Exploratory Parking Lot (Questions & Ideas to Investigate Later)
+## 4. Phase 3: Current Horizons & Explorations
 
-These items are intentionally kept in the exploration queue so we do not over-engineer early phases:
+With the Phase 2 production native engine established, Phase 3 addresses procedural animation, display scaling, and expanded workspace feeders:
 
-- **Windhawk Mod Packaging & `user32!SetCursor` Hooking**:
-  - Explore wrapping the C++ core as a Windhawk mod (`dynamic-cursor.wh.cpp`) both to reach the Windhawk community and to test intercepting `user32!SetCursor` inside apps that override `OCR_NORMAL` with custom cursors.
-- **Hardware-Locked Desktop Pet / Animated Sprite Frames**:
-  - Explore stepping through multi-frame sprite sheets (or `.ani` memory streams via `CreateIconFromResourceEx`) inside the bottom-right quadrant of the hardware cursor canvas so a tiny companion animation reacts to system events.
-- **Contextual Cursor Morphing**:
-  - Explore subtle cursor transformations fed by external context (such as a minimal reading cursor in documentation/PDF views, a media badge during YouTube playback, or a progress ring during background compilation).
-- **Per-Monitor DPI Scaling Awareness**:
-  - Investigate how `CreateIconIndirect` bitmaps behave when dragging across monitors with different DPI scaling factors (e.g., 100% vs 150%) and whether `WM_DPICHANGED` adjustments are needed.
+- **Task 3.1: Procedural Animated Sprite Frames**
+  - Step through multi-frame sprite sheets or `.ani` memory streams inside the bottom-right quadrant of the `64x64` hardware cursor canvas.
+  - Enable desktop companion sprites and animated state spinners without spawning overlay windows.
+- **Task 3.2: Per-Monitor DPI Scaling Awareness**
+  - Investigate `CreateIconIndirect` bitmap scaling behavior across mixed DPI setups (e.g., 100% and 150% displays).
+  - Handle `WM_DPICHANGED` messages to scale the hardware canvas dynamically between `64x64`, `96x96`, and `128x128` pixels based on active monitor scaling metrics.
+- **Task 3.3: Expanded Feeder Integrations**
+  - Author reference feeder bridges for Active Desktop Context Engine, browser media playback status, and IDE background compilation watchers.
+  - Provide minimal PowerShell and C# feeder client snippets.
