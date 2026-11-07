@@ -329,7 +329,7 @@ class MockPipeCompositorServer:
         with self.lock:
             if len(data) >= 32 and struct.unpack("<I", data[:4])[0] == BINARY_PACKET_MAGIC:
                 # Binary frame
-                magic, op, shape, badge, prio, argb, prog, ttl, layer_hash, res = struct.unpack(
+                magic, op, shape, badge, prio, argb, prog, ttl, layer_hash, prog_style, res = struct.unpack(
                     BINARY_PACKET_FORMAT, data[:32]
                 )
                 layer_id = f"bin_{layer_hash}" if layer_hash != 0 else "binary_layer"
@@ -340,6 +340,7 @@ class MockPipeCompositorServer:
                         "tint_rgba": f"#{argb:08X}" if argb != 0 else None,
                         "badge_id": badge if badge != 0 else None,
                         "progress": prog if prog >= 0.0 else None,
+                        "progress_style": prog_style,
                     }
                 elif op == Operation.REMOVE:
                     self.active_layers[session_id].pop(layer_id, None)
@@ -437,7 +438,7 @@ def test_client_in_process_protocol_suite() -> None:
 
             with server.lock:
                 comp = dict(server.composite)
-            assert comp["toast"] == {"text": "Build completed", "duration_ms": 2000}
+            assert comp["toast"] == {"text": "Build completed", "duration_ms": 2000, "follow_cursor": True}
 
     finally:
         server.stop()
@@ -730,7 +731,9 @@ def test_cli_notify_integration() -> None:
         time.sleep(0.05)
         with server.lock:
             state = dict(server.composite)
-        assert state["toast"] == {"text": "Test build succeeded", "duration_ms": 1000}
+        assert state["toast"]["text"] == "Test build succeeded"
+        assert state["toast"]["duration_ms"] == 1000
+        assert state["toast"]["follow_cursor"] is True
         assert state["progress"] is None
 
     finally:

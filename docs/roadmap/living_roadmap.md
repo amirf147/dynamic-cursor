@@ -67,8 +67,8 @@ All Phase 2 implementation tasks have been completed and verified across native 
   - **Empirical Result**: Compact 96 KB native executable consuming 1.64 MB private working set during active named pipe streaming. Implements WinMain message pump, system tray notification icon (`Shell_NotifyIcon`), single-instance mutex (`Local\DynamicCursorSingleInstanceMutex`), and fail-safe recovery via `perform_system_restoration()` calling `SPI_SETCURSORS`. Verified in `tests/test_e2e_daemon.py::test_native_daemon_e2e`.
   - **Source**: [`src/daemon/main.cpp`](../../src/daemon/main.cpp).
 
-- [x] **Task 2.5: Windhawk Mod Package (`dynamic-cursor.wh.cpp`)**
-  - **Empirical Result**: Standalone Windhawk mod compiling under bundled Clang 20.1 targeting MinGW-w64 with `windhawk_api.h`. Detours `user32!SetCursor` using `Wh_SetFunctionHook` to maintain composite states inside applications that override system cursors during `WM_SETCURSOR`.
+- [ ] **Task 2.5: Windhawk Mod Package (`dynamic-cursor.wh.cpp`) (EXPERIMENTAL PROTOTYPE)**
+  - **Status**: Prototype hook compiled under bundled Clang 20.1 targeting MinGW-w64 with `windhawk_api.h`. Detours `user32!SetCursor` using `Wh_SetFunctionHook` for static mod settings tinting. Active Named Pipe IPC client streaming and application cursor filtering remain in development.
   - **Source & Documentation**: [`src/windhawk/dynamic-cursor.wh.cpp`](../../src/windhawk/dynamic-cursor.wh.cpp), [`src/windhawk/README.md`](../../src/windhawk/README.md).
 
 - [x] **Task 2.6: Production Feeder Bridges**

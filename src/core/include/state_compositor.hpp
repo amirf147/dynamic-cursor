@@ -15,6 +15,7 @@
 #include <mutex>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace dynamic_cursor {
@@ -31,6 +32,7 @@ struct CompositeState {
     uint32_t tint_argb{0};
     BadgeId badge{BadgeId::None};
     float progress{-1.0f};
+    ProgressStyle progress_style{ProgressStyle::Minimal};
     ToastSpec toast;
     bool has_toast{false};
 
@@ -66,11 +68,16 @@ struct CompositeState {
         std::memcpy(&prog_bits, &progress, sizeof(prog_bits));
         update_bytes(&prog_bits, sizeof(prog_bits));
 
+        const auto style_val = static_cast<uint8_t>(progress_style);
+        update_bytes(&style_val, sizeof(style_val));
+
         const uint8_t toast_flag = has_toast ? 1 : 0;
         update_bytes(&toast_flag, sizeof(toast_flag));
 
         if (has_toast) {
             update_bytes(&toast.duration_ms, sizeof(toast.duration_ms));
+            const uint8_t follow_flag = toast.follow_cursor ? 1 : 0;
+            update_bytes(&follow_flag, sizeof(follow_flag));
             update_bytes(toast.text.data(), toast.text.size());
         }
 
@@ -99,7 +106,7 @@ public:
         if (payload.layer_id.empty()) {
             payload.layer_id = "session_" + std::to_string(client_session_id);
         }
-        active_layers_[payload.layer_id] = std::move(payload);
+        active_layers_[std::make_pair(client_session_id, payload.layer_id)] = std::move(payload);
         return evaluate_composite_locked();
     }
 
@@ -107,10 +114,15 @@ public:
     /// If client_session_id is non-zero, only layers belonging to that session are removed.
     CompositeState remove_layer(uint64_t client_session_id, const std::string& layer_id) {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = active_layers_.find(layer_id);
-        if (it != active_layers_.end()) {
-            if (client_session_id == 0 || it->second.client_session_id == client_session_id) {
-                active_layers_.erase(it);
+        if (client_session_id != 0) {
+            active_layers_.erase(std::make_pair(client_session_id, layer_id));
+        } else {
+            for (auto it = active_layers_.begin(); it != active_layers_.end();) {
+                if (it->first.second == layer_id) {
+                    it = active_layers_.erase(it);
+                } else {
+                    ++it;
+                }
             }
         }
         return evaluate_composite_locked();
@@ -120,7 +132,7 @@ public:
     CompositeState clear_client_layers(uint64_t client_session_id) {
         std::lock_guard<std::mutex> lock(mutex_);
         for (auto it = active_layers_.begin(); it != active_layers_.end();) {
-            if (it->second.client_session_id == client_session_id) {
+            if (it->first.first == client_session_id) {
                 it = active_layers_.erase(it);
             } else {
                 ++it;
@@ -152,7 +164,7 @@ public:
     [[nodiscard]] uint64_t earliest_ttl_deadline_ms() const {
         std::lock_guard<std::mutex> lock(mutex_);
         uint64_t earliest = 0;
-        for (const auto& [id, layer] : active_layers_) {
+        for (const auto& [key, layer] : active_layers_) {
             if (layer.ttl_ms > 0) {
                 const uint64_t deadline = layer.created_tick_ms + layer.ttl_ms;
                 if (earliest == 0 || deadline < earliest) {
@@ -175,12 +187,23 @@ public:
         return active_layers_.size();
     }
 
-    /// Finds an active layer by identifier.
-    [[nodiscard]] std::optional<LayerPayload> get_layer(const std::string& layer_id) const {
+    /// Finds an active layer by session id and layer identifier.
+    [[nodiscard]] std::optional<LayerPayload> get_layer(uint64_t client_session_id, const std::string& layer_id) const {
         std::lock_guard<std::mutex> lock(mutex_);
-        auto it = active_layers_.find(layer_id);
+        auto it = active_layers_.find(std::make_pair(client_session_id, layer_id));
         if (it != active_layers_.end()) {
             return it->second;
+        }
+        return std::nullopt;
+    }
+
+    /// Finds the first active layer matching the layer identifier.
+    [[nodiscard]] std::optional<LayerPayload> get_layer(const std::string& layer_id) const {
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (const auto& [key, layer] : active_layers_) {
+            if (key.second == layer_id) {
+                return layer;
+            }
         }
         return std::nullopt;
     }
@@ -218,7 +241,7 @@ private:
         uint64_t toast_tick = 0;
         bool toast_set = false;
 
-        for (const auto& [id, layer] : active_layers_) {
+        for (const auto& [key, layer] : active_layers_) {
             if (layer.has_shape) {
                 if (!shape_set || layer.priority > shape_priority ||
                     (layer.priority == shape_priority && layer.created_tick_ms >= shape_tick)) {
@@ -253,6 +276,7 @@ private:
                 if (!progress_set || layer.priority > progress_priority ||
                     (layer.priority == progress_priority && layer.created_tick_ms >= progress_tick)) {
                     state.progress = layer.progress;
+                    state.progress_style = layer.has_progress_style ? layer.progress_style : ProgressStyle::Minimal;
                     progress_priority = layer.priority;
                     progress_tick = layer.created_tick_ms;
                     progress_set = true;
@@ -275,7 +299,7 @@ private:
     }
 
     mutable std::mutex mutex_;
-    std::map<std::string, LayerPayload> active_layers_;
+    std::map<std::pair<uint64_t, std::string>, LayerPayload> active_layers_;
 };
 
 } // namespace dynamic_cursor

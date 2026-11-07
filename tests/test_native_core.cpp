@@ -65,6 +65,7 @@ bool test_binary_and_json_serialization() {
     packet.progress = 0.65f;
     packet.ttl_ms = 4500;
     packet.layer_hash = 9876;
+    packet.progress_style = static_cast<uint8_t>(ProgressStyle::Overlay);
 
     LayerPayload binary_payload{};
     uint8_t op_code = 0;
@@ -81,6 +82,7 @@ bool test_binary_and_json_serialization() {
     TEST_ASSERT(binary_payload.priority == 50);
     TEST_ASSERT(binary_payload.has_tint && binary_payload.tint_argb == 0xFFFF8000);
     TEST_ASSERT(binary_payload.has_progress && std::abs(binary_payload.progress - 0.65f) < 0.001f);
+    TEST_ASSERT(binary_payload.has_progress_style && binary_payload.progress_style == ProgressStyle::Overlay);
     TEST_ASSERT(binary_payload.ttl_ms == 4500);
     TEST_ASSERT(binary_payload.layer_id == "bin_9876");
 
@@ -91,8 +93,8 @@ bool test_binary_and_json_serialization() {
     // Subtest C: Length-prefixed JSON frame serialization
     const std::string json_data =
         R"({"op":"upsert","layer_id":"voice_layer","priority":75,"base_shape":"precision_cross",)"
-        R"("badge_id":"vim_normal","tint_argb":"0xFF00FF00","progress":0.42,"ttl_ms":3000,)"
-        R"("toast":{"text":"Recording Active","duration_ms":1200}})";
+        R"("badge_id":"vim_normal","tint_argb":"0xFF00FF00","progress":0.42,"progress_style":"overlay","ttl_ms":3000,)"
+        R"("toast":{"text":"Recording Active","duration_ms":1200,"follow_cursor":true}})";
 
     LayerPayload json_payload{};
     const bool json_parse_ok = parse_json_frame(json_data, json_payload, op_code);
@@ -104,8 +106,9 @@ bool test_binary_and_json_serialization() {
     TEST_ASSERT(json_payload.has_badge && json_payload.badge == BadgeId::VimNormal);
     TEST_ASSERT(json_payload.has_tint && json_payload.tint_argb == 0xFF00FF00);
     TEST_ASSERT(json_payload.has_progress && std::abs(json_payload.progress - 0.42f) < 0.001f);
+    TEST_ASSERT(json_payload.has_progress_style && json_payload.progress_style == ProgressStyle::Overlay);
     TEST_ASSERT(json_payload.ttl_ms == 3000);
-    TEST_ASSERT(json_payload.has_toast && json_payload.toast.text == "Recording Active" && json_payload.toast.duration_ms == 1200);
+    TEST_ASSERT(json_payload.has_toast && json_payload.toast.text == "Recording Active" && json_payload.toast.duration_ms == 1200 && json_payload.toast.follow_cursor);
 
     // Malformed JSON check
     LayerPayload invalid_payload{};
@@ -192,6 +195,33 @@ bool test_multi_channel_priority_composition() {
 
     state = compositor.purge_expired_layers(1500);
     TEST_ASSERT(state.badge == BadgeId::MicOff); // Expired at t = 1500, restored to layer 2
+
+    // Session layer namespace isolation: identical layer_id across sessions must not collide
+    LayerPayload sess10{};
+    sess10.layer_id = "shared_id";
+    sess10.priority = 10;
+    sess10.has_badge = true;
+    sess10.badge = BadgeId::MicOff;
+    compositor.upsert_layer(100, sess10);
+
+    LayerPayload sess20{};
+    sess20.layer_id = "shared_id";
+    sess20.priority = 20;
+    sess20.has_badge = true;
+    sess20.badge = BadgeId::TvIcon;
+    compositor.upsert_layer(200, sess20);
+
+    // Active layers: layer 1 (base_visuals), layer 2 (cross_badge), sess10, sess20 = 4 layers
+    TEST_ASSERT(compositor.active_layers_count() == 4);
+    TEST_ASSERT(compositor.evaluate_composite().badge == BadgeId::TvIcon);
+
+    // Disconnect session 200; session 100's shared_id layer must remain intact
+    compositor.clear_client_layers(200);
+    TEST_ASSERT(compositor.active_layers_count() == 3);
+    TEST_ASSERT(compositor.evaluate_composite().badge == BadgeId::MicOff);
+
+    compositor.clear_client_layers(100);
+    TEST_ASSERT(compositor.active_layers_count() == 2);
 
     return true;
 }
@@ -299,6 +329,27 @@ bool test_overlay_creation_and_styles() {
     TEST_ASSERT(overlay.is_following());
     overlay.stop_following();
     TEST_ASSERT(!overlay.is_following());
+
+    // Verify automatic cursor follower activation in show_toast and show_hud
+    overlay.show_toast("Test Toast", 1000, true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    TEST_ASSERT(overlay.is_following());
+    TEST_ASSERT(overlay.is_visible());
+
+    overlay.hide();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    TEST_ASSERT(!overlay.is_following());
+    TEST_ASSERT(!overlay.is_visible());
+
+    overlay.show_hud("Compiling", 0.75f, true);
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    TEST_ASSERT(overlay.is_following());
+    TEST_ASSERT(overlay.is_visible());
+
+    overlay.hide();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    TEST_ASSERT(!overlay.is_following());
+    TEST_ASSERT(!overlay.is_visible());
 
     overlay.stop();
     TEST_ASSERT(overlay.hwnd() == nullptr);

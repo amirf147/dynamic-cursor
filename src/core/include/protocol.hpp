@@ -43,6 +43,13 @@ enum class BadgeId : uint16_t {
     VimNormal = 4
 };
 
+/// Progress presentation styles.
+enum class ProgressStyle : uint8_t {
+    Minimal = 0,    // Attached directly to hardware cursor bitmap
+    Overlay = 1,    // Floating companion overlay HUD card
+    Both = 2        // Both minimal in-cursor and companion overlay card
+};
+
 /// Protocol operations for layer mutations.
 enum class Operation : uint8_t {
     Upsert = 1,
@@ -62,7 +69,8 @@ struct BinaryPacket {
     float progress{-1.0f};
     uint32_t ttl_ms{0};
     uint32_t layer_hash{0};
-    uint32_t reserved{0};
+    uint8_t progress_style{0};
+    uint8_t reserved[3]{0, 0, 0};
 };
 #pragma pack(pop)
 
@@ -72,6 +80,7 @@ static_assert(sizeof(BinaryPacket) == 32, "BinaryPacket must be exactly 32 bytes
 struct ToastSpec {
     std::string text;
     uint32_t duration_ms{1500};
+    bool follow_cursor{true};
 
     bool operator==(const ToastSpec&) const = default;
 };
@@ -88,6 +97,8 @@ struct LayerPayload {
     bool has_badge{false};
     float progress{-1.0f};
     bool has_progress{false};
+    ProgressStyle progress_style{ProgressStyle::Minimal};
+    bool has_progress_style{false};
     ToastSpec toast;
     bool has_toast{false};
     uint32_t ttl_ms{0};
@@ -147,6 +158,20 @@ constexpr void encode_frame_length(uint32_t length, uint8_t* out_header_bytes) n
     }
     if (name == "vim_normal" || name == "vim" || name == "4") {
         return BadgeId::VimNormal;
+    }
+    return std::nullopt;
+}
+
+/// Parses ProgressStyle from textual name.
+[[nodiscard]] inline std::optional<ProgressStyle> progress_style_from_string(std::string_view name) noexcept {
+    if (name == "minimal" || name == "in_cursor" || name == "cursor" || name == "0" || name.empty()) {
+        return ProgressStyle::Minimal;
+    }
+    if (name == "overlay" || name == "companion" || name == "hud" || name == "card" || name == "1") {
+        return ProgressStyle::Overlay;
+    }
+    if (name == "both" || name == "all" || name == "2") {
+        return ProgressStyle::Both;
     }
     return std::nullopt;
 }
@@ -563,6 +588,14 @@ inline bool parse_binary_frame(const uint8_t* data, size_t length, LayerPayload&
         out_payload.has_progress = false;
     }
 
+    if (packet->progress_style <= static_cast<uint8_t>(ProgressStyle::Both)) {
+        out_payload.progress_style = static_cast<ProgressStyle>(packet->progress_style);
+        out_payload.has_progress_style = true;
+    } else {
+        out_payload.progress_style = ProgressStyle::Minimal;
+        out_payload.has_progress_style = false;
+    }
+
     out_payload.ttl_ms = packet->ttl_ms;
     if (packet->layer_hash != 0) {
         out_payload.layer_id = "bin_" + std::to_string(packet->layer_hash);
@@ -695,6 +728,28 @@ inline bool parse_json_frame(std::string_view json_str, LayerPayload& out_payloa
         out_payload.has_progress = (out_payload.progress >= 0.0f);
     }
 
+    out_payload.has_progress_style = false;
+    out_payload.progress_style = ProgressStyle::Minimal;
+    const auto* prog_style_node = root.find("progress_style");
+    if (prog_style_node == nullptr) {
+        prog_style_node = root.find("progress_mode");
+    }
+    if (prog_style_node != nullptr) {
+        if (prog_style_node->type == json_internal::ValueType::String) {
+            auto parsed_style = progress_style_from_string(prog_style_node->str_val);
+            if (parsed_style.has_value()) {
+                out_payload.progress_style = *parsed_style;
+                out_payload.has_progress_style = true;
+            }
+        } else if (prog_style_node->type == json_internal::ValueType::Number) {
+            const auto ps = static_cast<uint8_t>(prog_style_node->num_val);
+            if (ps <= static_cast<uint8_t>(ProgressStyle::Both)) {
+                out_payload.progress_style = static_cast<ProgressStyle>(ps);
+                out_payload.has_progress_style = true;
+            }
+        }
+    }
+
     const auto* ttl_node = root.find("ttl_ms");
     if (ttl_node != nullptr && ttl_node->type == json_internal::ValueType::Number) {
         out_payload.ttl_ms = static_cast<uint32_t>(ttl_node->num_val);
@@ -717,9 +772,16 @@ inline bool parse_json_frame(std::string_view json_str, LayerPayload& out_payloa
             } else {
                 out_payload.toast.duration_ms = 1500;
             }
+            const auto* follow_node = toast_node->find("follow_cursor");
+            if (follow_node != nullptr && follow_node->type == json_internal::ValueType::Boolean) {
+                out_payload.toast.follow_cursor = follow_node->bool_val;
+            } else {
+                out_payload.toast.follow_cursor = true;
+            }
         } else if (toast_node->type == json_internal::ValueType::String) {
             out_payload.toast.text = toast_node->str_val;
             out_payload.toast.duration_ms = 1500;
+            out_payload.toast.follow_cursor = true;
             out_payload.has_toast = !out_payload.toast.text.empty();
         }
     }

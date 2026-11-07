@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional, Union
 # Win32 Named Pipe constants
 DEFAULT_PIPE_NAME = r"\\.\pipe\dynamic_cursor"
 BINARY_PACKET_MAGIC = 0x44435552
-BINARY_PACKET_FORMAT = "<IBBHiIfIII"
+BINARY_PACKET_FORMAT = "<IBBHiIfIIB3s"
 BINARY_PACKET_SIZE = 32
 FRAME_HEADER_SIZE = 4
 MAX_PAYLOAD_SIZE = 16 * 1024 * 1024
@@ -92,6 +92,14 @@ class BadgeId(IntEnum):
     MIC_ON = 2
     TV_ICON = 3
     VIM_NORMAL = 4
+
+
+class ProgressStyle(IntEnum):
+    """Progress presentation styles."""
+
+    MINIMAL = 0
+    OVERLAY = 1
+    BOTH = 2
 
 
 class Operation(IntEnum):
@@ -199,6 +207,34 @@ def normalize_badge(badge: Union[str, int, BadgeId, None]) -> int:
         "vim_normal": 4,
         "vim": 4,
         "4": 4,
+    }
+    return mapping.get(name, 0)
+
+
+def normalize_progress_style(style: Union[str, int, ProgressStyle, None]) -> int:
+    """Maps progress style names or enum members to numeric identifiers."""
+    if style is None:
+        return 0
+    if isinstance(style, ProgressStyle):
+        return int(style.value)
+    if isinstance(style, int):
+        return style if 0 <= style <= 2 else 0
+
+    name = str(style).strip().lower()
+    mapping = {
+        "minimal": 0,
+        "in_cursor": 0,
+        "cursor": 0,
+        "0": 0,
+        "": 0,
+        "overlay": 1,
+        "companion": 1,
+        "hud": 1,
+        "card": 1,
+        "1": 1,
+        "both": 2,
+        "all": 2,
+        "2": 2,
     }
     return mapping.get(name, 0)
 
@@ -350,6 +386,7 @@ class DynamicCursorClient:
         progress: float = -1.0,
         ttl_ms: int = 0,
         layer_hash: int = 0,
+        progress_style: int = 0,
     ) -> None:
         """Packs attributes into a 32-byte binary packet and transmits a framed packet."""
         packet = struct.pack(
@@ -363,7 +400,8 @@ class DynamicCursorClient:
             float(progress),
             int(ttl_ms) & 0xFFFFFFFF,
             int(layer_hash) & 0xFFFFFFFF,
-            0,
+            int(progress_style) & 0xFF,
+            b"\x00\x00\x00",
         )
         self._write_frame(packet)
 
@@ -375,6 +413,7 @@ class DynamicCursorClient:
         tint_rgba: Optional[str] = None,
         badge_id: Optional[str] = None,
         progress: Optional[float] = None,
+        progress_style: Optional[str] = None,
         ttl_ms: int = 0,
         use_binary: bool = False,
     ) -> None:
@@ -384,6 +423,7 @@ class DynamicCursorClient:
             badge_val = normalize_badge(badge_id)
             argb_val = parse_color_to_argb(tint_rgba)
             prog_val = float(progress) if progress is not None else -1.0
+            style_val = normalize_progress_style(progress_style)
             layer_hash = compute_layer_hash(layer_id)
             self.send_binary(
                 op=Operation.UPSERT,
@@ -394,6 +434,7 @@ class DynamicCursorClient:
                 progress=prog_val,
                 ttl_ms=ttl_ms,
                 layer_hash=layer_hash,
+                progress_style=style_val,
             )
             return
 
@@ -411,6 +452,8 @@ class DynamicCursorClient:
             payload["badge_id"] = badge_id
         if progress is not None:
             payload["progress"] = progress
+        if progress_style is not None:
+            payload["progress_style"] = progress_style
         if ttl_ms > 0:
             payload["ttl_ms"] = ttl_ms
 
@@ -431,15 +474,22 @@ class DynamicCursorClient:
         }
         self.send_json(payload)
 
-    def show_toast(self, text: str, duration_ms: int = 1500) -> None:
+    def show_toast(
+        self,
+        text: str,
+        duration_ms: int = 1500,
+        follow_cursor: bool = True,
+    ) -> None:
         """Dispatches an ephemeral micro-notification to the companion overlay."""
         payload = {
             "op": "upsert",
             "layer_id": "toast_overlay",
             "priority": 1000,
+            "ttl_ms": duration_ms,
             "toast": {
                 "text": text,
                 "duration_ms": duration_ms,
+                "follow_cursor": follow_cursor,
             },
         }
         self.send_json(payload)

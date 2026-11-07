@@ -14,6 +14,14 @@
 #endif
 #include <windows.h>
 
+#ifndef PIPE_REJECT_REMOTE_CLIENTS
+#define PIPE_REJECT_REMOTE_CLIENTS 0x00000008
+#endif
+
+#ifndef FILE_FLAG_FIRST_PIPE_INSTANCE
+#define FILE_FLAG_FIRST_PIPE_INSTANCE 0x00080000
+#endif
+
 #ifdef _MSC_VER
 #pragma comment(lib, "kernel32.lib")
 #endif
@@ -42,7 +50,7 @@ public:
     static constexpr size_t kDefaultInstances = 4;
     static constexpr size_t kMaxInstances = 63;
     static constexpr DWORD kPipeBufferSize = 65536;
-    static constexpr uint32_t kMaxPayloadSize = 16 * 1024 * 1024;
+    static constexpr uint32_t kMaxPayloadSize = 64 * 1024; // 64 KB ceiling for frame payloads
 
     explicit IpcServer(
         std::wstring pipe_name = kDefaultPipeName,
@@ -412,10 +420,15 @@ private:
                 break;
             }
 
+            DWORD open_mode = PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED;
+            if (i == 0) {
+                open_mode |= FILE_FLAG_FIRST_PIPE_INSTANCE;
+            }
+
             slots[i].pipe_handle.reset(CreateNamedPipeW(
                 pipe_name_.c_str(),
-                PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
-                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+                open_mode,
+                PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
                 PIPE_UNLIMITED_INSTANCES,
                 kPipeBufferSize,
                 kPipeBufferSize,

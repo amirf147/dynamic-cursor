@@ -104,6 +104,26 @@ public:
     static constexpr int kMinCardWidth = 88;
     static constexpr int kMaxCardWidth = 360;
 
+    /// Computes monitor-clamped desktop coordinates ensuring the card remains fully on screen.
+    [[nodiscard]] static POINT compute_clamped_position(POINT cursor_pt, int card_w, int card_h) noexcept {
+        HMONITOR h_mon = MonitorFromPoint(cursor_pt, MONITOR_DEFAULTTONEAREST);
+        MONITORINFO mi{};
+        mi.cbSize = sizeof(MONITORINFO);
+        int target_x = cursor_pt.x + kOverlayOffsetX;
+        int target_y = cursor_pt.y + kOverlayOffsetY;
+        if (GetMonitorInfoW(h_mon, &mi)) {
+            if (target_x + card_w > mi.rcWork.right) {
+                target_x = cursor_pt.x - card_w - 8;
+            }
+            if (target_y + card_h > mi.rcWork.bottom) {
+                target_y = cursor_pt.y - card_h - 8;
+            }
+            target_x = std::clamp(target_x, static_cast<int>(mi.rcWork.left), static_cast<int>(mi.rcWork.right - card_w));
+            target_y = std::clamp(target_y, static_cast<int>(mi.rcWork.top), static_cast<int>(mi.rcWork.bottom - card_h));
+        }
+        return POINT{target_x, target_y};
+    }
+
     /// Spawns a dedicated background UI thread and waits for window creation to complete.
     CompanionOverlay() {
         ready_event_.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
@@ -139,11 +159,11 @@ public:
     }
 
     /// Mode A: Spawns an anchored toast card near cursor position with automatic dismissal.
-    /// Queries cursor coordinates once on arrival and installs zero mouse hooks.
-    void show_toast(const std::string& text, uint32_t duration_ms = 1500) {
+    /// In follower mode, registers the raw input sink to follow the cursor while active.
+    void show_toast(const std::string& text, uint32_t duration_ms = 1500, bool follow_cursor = true) {
         {
             std::lock_guard<std::mutex> lock(request_mutex_);
-            pending_toast_ = ToastRequest{text, duration_ms};
+            pending_toast_ = ToastRequest{text, duration_ms, follow_cursor};
         }
         if (hwnd_ != nullptr) {
             PostMessageW(hwnd_, WM_OVERLAY_SHOW_TOAST, 0, 0);
@@ -152,14 +172,14 @@ public:
 
     /// Overload accepting structured ToastSpec configuration.
     void show_toast(const ToastSpec& spec) {
-        show_toast(spec.text, spec.duration_ms);
+        show_toast(spec.text, spec.duration_ms, spec.follow_cursor);
     }
 
-    /// Displays companion HUD content with an optional progress bar.
-    void show_hud(const std::string& text, float progress = -1.0f) {
+    /// Displays companion HUD content with an optional progress bar and cursor following.
+    void show_hud(const std::string& text, float progress = -1.0f, bool follow_cursor = true) {
         {
             std::lock_guard<std::mutex> lock(request_mutex_);
-            pending_hud_ = HudRequest{text, progress};
+            pending_hud_ = HudRequest{text, progress, follow_cursor};
         }
         if (hwnd_ != nullptr) {
             PostMessageW(hwnd_, WM_OVERLAY_SHOW_HUD, 0, 0);
@@ -220,11 +240,13 @@ private:
     struct ToastRequest {
         std::string text;
         uint32_t duration_ms{1500};
+        bool follow_cursor{true};
     };
 
     struct HudRequest {
         std::string text;
         float progress{-1.0f};
+        bool follow_cursor{true};
     };
 
     UniqueHandle ready_event_;
@@ -236,6 +258,8 @@ private:
     std::atomic<bool> following_{false};
     std::atomic<bool> is_visible_{false};
     std::atomic<bool> raw_input_registered_{false};
+    std::atomic<int> card_w_{kMinCardWidth};
+    std::atomic<int> card_h_{38};
 
     mutable std::mutex request_mutex_;
     ToastRequest pending_toast_;
@@ -357,6 +381,8 @@ private:
                 KillTimer(hwnd, TIMER_TOAST_ID);
                 ShowWindow(hwnd, SW_HIDE);
                 is_visible_.store(false, std::memory_order_release);
+                following_.store(false, std::memory_order_release);
+                unregister_raw_input_internal();
                 return 0;
             }
             break;
@@ -375,11 +401,16 @@ private:
                 if (result != static_cast<UINT>(-1) && raw.header.dwType == RIM_TYPEMOUSE) {
                     POINT pt{};
                     if (GetCursorPos(&pt)) {
+                        const POINT clamped = compute_clamped_position(
+                            pt,
+                            card_w_.load(std::memory_order_relaxed),
+                            card_h_.load(std::memory_order_relaxed)
+                        );
                         SetWindowPos(
                             hwnd,
                             nullptr,
-                            pt.x + kOverlayOffsetX,
-                            pt.y + kOverlayOffsetY,
+                            clamped.x,
+                            clamped.y,
                             0,
                             0,
                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
@@ -395,7 +426,7 @@ private:
                 std::lock_guard<std::mutex> lock(request_mutex_);
                 req = pending_toast_;
             }
-            render_and_show_toast(req.text, req.duration_ms);
+            render_and_show_toast(req.text, req.duration_ms, req.follow_cursor);
             return 0;
         }
 
@@ -405,7 +436,7 @@ private:
                 std::lock_guard<std::mutex> lock(request_mutex_);
                 req = pending_hud_;
             }
-            render_and_show_hud(req.text, req.progress);
+            render_and_show_hud(req.text, req.progress, req.follow_cursor);
             return 0;
         }
 
@@ -494,8 +525,8 @@ private:
         unregister_raw_input_internal();
     }
 
-    /// Renders and displays a spawn-anchored toast at current cursor position.
-    void render_and_show_toast(const std::string& text, uint32_t duration_ms) {
+    /// Renders and displays a toast at current cursor position with optional cursor following.
+    void render_and_show_toast(const std::string& text, uint32_t duration_ms, bool follow_cursor = true) {
         if (hwnd_ == nullptr) {
             return;
         }
@@ -504,11 +535,18 @@ private:
             pt.x = 100;
             pt.y = 100;
         }
-        render_and_present_card(text, -1.0f, pt.x + kOverlayOffsetX, pt.y + kOverlayOffsetY, duration_ms);
+        render_and_present_card(text, -1.0f, pt.x, pt.y, duration_ms);
+        if (follow_cursor) {
+            following_.store(true, std::memory_order_release);
+            register_raw_input_internal();
+        } else {
+            following_.store(false, std::memory_order_release);
+            unregister_raw_input_internal();
+        }
     }
 
-    /// Renders and displays HUD card at current cursor position.
-    void render_and_show_hud(const std::string& text, float progress) {
+    /// Renders and displays HUD card at current cursor position with optional cursor following.
+    void render_and_show_hud(const std::string& text, float progress, bool follow_cursor = true) {
         if (hwnd_ == nullptr) {
             return;
         }
@@ -517,7 +555,14 @@ private:
             pt.x = 100;
             pt.y = 100;
         }
-        render_and_present_card(text, progress, pt.x + kOverlayOffsetX, pt.y + kOverlayOffsetY, 0);
+        render_and_present_card(text, progress, pt.x, pt.y, 0);
+        if (follow_cursor) {
+            following_.store(true, std::memory_order_release);
+            register_raw_input_internal();
+        } else {
+            following_.store(false, std::memory_order_release);
+            unregister_raw_input_internal();
+        }
     }
 
     /// Composites card graphics, measures text, and updates layered window.
@@ -779,12 +824,15 @@ private:
             DeleteObject(hbm_text);
         }
 
+        card_w_.store(card_w, std::memory_order_relaxed);
+        card_h_.store(card_h, std::memory_order_relaxed);
+
         HDC hdc_card = CreateCompatibleDC(hdc_screen);
         HGDIOBJ old_card_bm = SelectObject(hdc_card, hbm_card);
 
         POINT pt_src{0, 0};
         SIZE wnd_size{card_w, card_h};
-        POINT pt_dst{pos_x, pos_y};
+        POINT pt_dst = compute_clamped_position(POINT{pos_x, pos_y}, card_w, card_h);
 
         BLENDFUNCTION blend{};
         blend.BlendOp = AC_SRC_OVER;

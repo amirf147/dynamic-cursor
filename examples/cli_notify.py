@@ -30,13 +30,14 @@ def run_progress_notification(
     duration_ms: int = 2500,
     layer_id: str = "cli_build",
     priority: int = 90,
+    progress_style: str = "minimal",
 ) -> None:
     """Executes a simulated progress animation and sends a completion toast."""
     sys.stdout.write(f"Connecting to Dynamic Cursor pipe: {pipe_name}\n")
     total_steps = max(1, steps)
 
     with DynamicCursorClient(pipe_name=pipe_name) as client:
-        sys.stdout.write("Starting task progress animation...\n")
+        sys.stdout.write(f"Starting task progress animation (style: {progress_style})...\n")
 
         for step in range(total_steps + 1):
             ratio = round(step / float(total_steps), 3)
@@ -47,6 +48,7 @@ def run_progress_notification(
                 priority=priority,
                 tint_rgba="#44AAFF",
                 progress=ratio,
+                progress_style=progress_style,
             )
 
             sys.stdout.write(f"\rProgress: [{ratio * 100:5.1f}%] (step {step}/{total_steps})")
@@ -97,6 +99,13 @@ def main() -> int:
         default=2500,
         help="Toast display duration in milliseconds.",
     )
+    parser.add_argument(
+        "--progress-style",
+        type=str,
+        default="minimal",
+        choices=["minimal", "overlay", "both"],
+        help="Progress bar presentation style: minimal (in-cursor), overlay (companion HUD), or both.",
+    )
     args = parser.parse_args()
 
     try:
@@ -106,6 +115,7 @@ def main() -> int:
             delay_sec=args.delay,
             toast_message=args.message,
             duration_ms=args.duration,
+            progress_style=args.progress_style,
         )
         return 0
     except Exception as exc:
