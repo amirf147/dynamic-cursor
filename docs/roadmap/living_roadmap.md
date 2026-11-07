@@ -77,16 +77,41 @@ All Phase 2 implementation tasks have been completed and verified across native 
 
 ---
 
-## 4. Phase 3: Current Horizons & Explorations
+## 4. Phase 3: Current Horizons & Visual Refinements
 
-With the Phase 2 production native engine established, Phase 3 addresses procedural animation, display scaling, and expanded workspace feeders:
+With the Phase 2 production native engine established, Phase 3 prioritizes visual polish, tight proximity anchoring, and display fidelity before investigating complex animated frames:
 
-- **Task 3.1: Procedural Animated Sprite Frames**
-  - Step through multi-frame sprite sheets or `.ani` memory streams inside the bottom-right quadrant of the `64x64` hardware cursor canvas.
-  - Enable desktop companion sprites and animated state spinners without spawning overlay windows.
+- **Task 3.1: Tight Proximity Anchoring & Spacing Calibration (Near-Term Priority)**
+  - Problem: The current `64x64` canvas places standard `16x19` pointer shapes at `(0, 0)` while corner badges reside at `(width - 20, height - 20)` (`(44, 44)`). This introduces an excessive 32-pixel diagonal gap between the cursor tail and the visual indicator.
+  - Objective: Anchor badges directly adjacent to the pointer body bounds (e.g., `x = 14`, `y = 12`) to produce a sleek, compact visual silhouette without dead space.
+  - Calibrate the companion overlay offset and minimum card width to eliminate excessive padding around short text strings.
+
 - **Task 3.2: Per-Monitor DPI Scaling Awareness**
-  - Investigate `CreateIconIndirect` bitmap scaling behavior across mixed DPI setups (e.g., 100% and 150% displays).
+  - Investigate `CreateIconIndirect` bitmap scaling behavior across mixed DPI setups (such as 100% and 150% displays).
   - Handle `WM_DPICHANGED` messages to scale the hardware canvas dynamically between `64x64`, `96x96`, and `128x128` pixels based on active monitor scaling metrics.
+
 - **Task 3.3: Expanded Feeder Integrations**
   - Author reference feeder bridges for Active Desktop Context Engine, browser media playback status, and IDE background compilation watchers.
   - Provide minimal PowerShell and C# feeder client snippets.
+
+---
+
+## 5. Phase 4: Long-Term Exploratory Horizons (Empirical Backlog)
+
+These items represent architectural ideas and visual enhancements gathered from prior art and empirical analysis of projects like `tinyhand`. They remain strictly in the discovery backlog until Phase 3 visual spacing is stabilized:
+
+- **Exploration 4.1: Direct-to-Bitmap Micro Text Strips**
+  - Investigate rasterizing 3 to 4 character status tags (e.g., `VIM`, `REC`, `NUM`) directly into the hardware cursor DIB using a compact 3x5 or 4x6 pixel font.
+  - Trade-off: Moves status text with zero latency directly on the hardware cursor plane, bypassing the need for companion overlay windows for short notifications.
+
+- **Exploration 4.2: Anti-Aliased Procedural Geometry**
+  - Evaluate replacing discrete 1-bit ASCII character masks with signed-distance-field (SDF) math or Direct2D software rasterization to produce smooth, anti-aliased pointer contours across high-DPI displays.
+
+- **Exploration 4.3: Kinetic Click Feedback**
+  - Explore subtle 1-pixel depression offsets or scale compression on mouse-down events to provide tactile visual feedback.
+
+- **Exploration 4.4: Ephemeral Presentation Ink Layer**
+  - Evaluate adding an on-demand fading ink trail to Mode B companion overlay for screen recording and live demonstrations.
+
+- **Exploration 4.5: Procedural Animated Sprite Frames**
+  - Deferred backlog item: Stepping multi-frame sprite sheets or `.ani` memory streams inside the hardware cursor canvas. Deferred until static visual layout and proximity are fully tuned.

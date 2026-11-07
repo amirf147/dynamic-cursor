@@ -116,3 +116,31 @@ Because Windhawk mods are written in C++, the core compositor and Named Pipe sta
 1. **Standalone Build**: Compiles into `dynamic-cursor.exe` with a lightweight system tray menu for users who want a standalone portable tool.
 2. **Windhawk Build**: Wraps the core in Windhawk's `@WindhawkMod` metadata header so users on the Windhawk platform can install and configure it directly from the Windhawk catalog.
 
+---
+
+## 6. Visual Fidelity & Proximity Horizons (Inspirations from TinyHand)
+
+Analysis of the open-source macOS pointer actuator [`nilbuild/tinyhand`](https://github.com/nilbuild/tinyhand) surfaced several techniques for visual ergonomics and rendering precision. Rather than rushing experimental mechanics into production, these findings are cataloged here as reference models for future visual refinement.
+
+### 1. Tight Proximity Anchoring (Eliminating Canvas Dead Space)
+- **Current Observation**: In `BitmapCompositor::compose`, the engine allocates a `64x64` ARGB canvas. The base arrow pointer occupies `16x19` pixels rooted at `(0, 0)`, while status badges are positioned at `(width - 20, height - 20)` (`44, 44`). This creates a diagonal dead space of over 30 transparent pixels, causing attached indicators to feel disconnected from the cursor.
+- **Architectural Solution**: Calculate badge placement relative to the active pointer silhouette's bounding box rather than the canvas boundaries. For a standard arrow, placing the badge at `(14, 12)` keeps it tucked immediately alongside the pointer stem. This creates a compact, unified visual silhouette while remaining entirely within the hardware cursor plane.
+
+### 2. Direct-to-Bitmap Micro Text Strips (Zero-Overlay Path)
+- **Current Observation**: Any text display currently routes through `CompanionOverlay::show_toast`, which spawns a dedicated Win32 layered window clamped to a 200-pixel minimum width and placed at a `+18px` offset.
+- **Architectural Solution**: For short 2-to-4 character status indicators (such as `VIM`, `REC`, `NUM`, `INS`, or `OFF`), investigate rasterizing tiny monochrome or tinted text strips directly into the `64x64` hardware cursor bitmap using a compact 3x5 or 4x6 pixel font.
+- **Trade-Off**: Text rendered inside the hardware cursor plane tracks mouse movement at display refresh rates (144 Hz to 240 Hz) with zero motion lag, zero window-management overhead, and zero companion window synchronization.
+
+### 3. Anti-Aliased Procedural Rasterization
+- **Current Observation**: `bitmap_compositor.hpp` currently renders the default pointer via a 1-bit ASCII bitmap mask (`kArrowMask`), producing stair-stepped edges on high-DPI displays.
+- **Architectural Solution**: Evaluate signed-distance-field (SDF) rasterization or Direct2D software rendering into the 32-bit pre-multiplied DIB section (`CreateDIBSection`). Computing sub-pixel edge coverage ensures smooth contours and clean scaling across high-DPI monitors.
+
+### 4. Kinetic Click Feedback & Tactile Settling
+- **Inspiration**: `tinyhand` applies an exponential decay compression (`pressAmount += (0 - pressAmount) * 0.18`) on mouse clicks, briefly compressing the pointer scale by 6% and pulling drop shadows tighter to simulate a tactile surface press.
+- **Exploration**: In Windows, a feeder or raw input listener could trigger a subtle 1-pixel inward depression offset or a momentary outline brightness flare on left mouse clicks, providing visual confirmation of click registration.
+
+### 5. Ephemeral Presentation Ink Layer
+- **Inspiration**: `tinyhand` includes an on-demand drawing layer using midpoint quadratic Bezier curves (`path.addQuadCurve`) that automatically fades out after 0.6 seconds.
+- **Exploration**: The existing Mode B companion overlay (`CompanionOverlay`) could be extended to support temporary trailing annotations for screen recordings and presentations, clearing automatically without manual cleanup.
+
+
