@@ -32,13 +32,13 @@ $$\text{Pixel} = (A \ll 24) \mid \left(\left\lfloor \frac{R \cdot A}{255} \right
 3. Generate a 1-bit monochrome mask via `gdi32.CreateBitmap(W, H, 1, 1, nullptr)`. For 32-bit ARGB cursors, Windows derives per-pixel transparency from the alpha channel of `hbmColor`, while `hbmMask` acts as an OS format requirement.
 4. Populate an `ICONINFO` structure:
    - `fIcon = FALSE` (specifies a cursor rather than an icon).
-   - `xHotspot = 0`, `yHotspot = 0` (anchors the active click coordinate at the arrow tip).
+   - `xHotspot`, `yHotspot` populated via `compute_hotspot()` (anchoring `(0, 0)` for arrows, `(7 * scale, 9 * scale)` at the text caret stem center, and `(5 * scale, 0)` at the link hand fingertip).
    - `hbmColor = hDibSection`, `hbmMask = hMonoMask`.
 5. Call `user32.CreateIconIndirect(&iconInfo)` to receive a valid `HCURSOR`.
-6. Store the master `HCURSOR` inside the `HardwareCursorDriver` LRU cache ([`src/core/include/hardware_driver.hpp`](../../src/core/include/hardware_driver.hpp)) and pass `duplicate_cursor_for_system(hMaster)` ([`src/core/include/raii_handles.hpp`](../../src/core/include/raii_handles.hpp)) to `user32.SetSystemCursor(hCopy, OCR_NORMAL)`.
+6. Store the master `HCURSOR` inside the `HardwareCursorDriver` LRU cache ([`src/core/include/hardware_driver.hpp`](../../src/core/include/hardware_driver.hpp)) and pass `duplicate_cursor_for_system(hMaster)` ([`src/core/include/raii_handles.hpp`](../../src/core/include/raii_handles.hpp)) to `user32.SetSystemCursor(hCopy, slotId)` across synchronized system slots (`OCR_NORMAL`, `OCR_IBEAM`, `OCR_HAND`).
 
 > [!IMPORTANT]
-> `user32.SetSystemCursor` takes exclusive ownership of and immediately destroys the handle passed to it. Master handles cached in memory must never be passed directly. Calling `duplicate_cursor_for_system` (`CopyIcon`) immediately prior to dispatch prevents handle exhaustion and Win32 Error 1402 (`ERROR_INVALID_CURSOR_HANDLE`).
+> `user32.SetSystemCursor` takes exclusive ownership of and immediately destroys the handle passed to it. Master handles cached in memory must never be passed directly. Calling `duplicate_cursor_for_system` (`CopyIcon`) immediately prior to dispatch prevents handle exhaustion and Win32 Error 1402 (`ERROR_INVALID_CURSOR_HANDLE`). Synchronizing across `OCR_NORMAL`, `OCR_IBEAM`, and `OCR_HAND` ensures color tints and badges follow seamlessly into text editing boxes and link hovering without reverting to untinted default carets.
 
 ---
 

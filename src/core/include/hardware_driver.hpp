@@ -23,9 +23,18 @@
 #include <list>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 #ifndef OCR_NORMAL
 #define OCR_NORMAL 32512
+#endif
+
+#ifndef OCR_IBEAM
+#define OCR_IBEAM 32513
+#endif
+
+#ifndef OCR_HAND
+#define OCR_HAND 32649
 #endif
 
 #ifndef SPI_SETCURSORS
@@ -72,57 +81,68 @@ public:
 
     /// Evaluates and applies the composite state to the operating system hardware cursor plane.
     /// Master handles remain in the internal cache and are never passed directly to user32.SetSystemCursor.
-    /// In dry_run mode, composites the handle and duplicates it without modifying system slots.
+    /// In dry_run mode, composites the handles and duplicates them without modifying system slots.
     bool apply_state(const CompositeState& state, bool dry_run = false) {
-        const uint64_t state_hash = state.compute_hash();
-        HCURSOR hMaster = nullptr;
+        struct TargetSlot {
+            uint32_t ocr_id;
+            BaseShape shape;
+        };
 
-        {
-            std::lock_guard<std::mutex> lock(mutex_);
-            auto it = cache_map_.find(state_hash);
-            if (it != cache_map_.end()) {
-                lru_order_.erase(it->second.order_it);
-                lru_order_.push_front(state_hash);
-                it->second.order_it = lru_order_.begin();
-                hMaster = it->second.cursor.get();
-            } else {
-                UniqueCursor master_cursor = BitmapCompositor::compose(state, canvas_size_);
-                if (!master_cursor) {
-                    return false;
-                }
-                hMaster = master_cursor.get();
+        std::vector<TargetSlot> targets;
+        targets.reserve(3);
+        targets.push_back({OCR_NORMAL, state.base_shape});
 
-                if (cache_map_.size() >= capacity_) {
-                    const uint64_t oldest_hash = lru_order_.back();
-                    lru_order_.pop_back();
-                    cache_map_.erase(oldest_hash);
-                }
+        if (multi_slot_sync_) {
+            targets.push_back({OCR_IBEAM, BaseShape::TextIBeam});
+            targets.push_back({OCR_HAND, BaseShape::HandPoint});
+        }
 
-                lru_order_.push_front(state_hash);
-                cache_map_.emplace(
-                    state_hash,
-                    CacheEntry{std::move(master_cursor), lru_order_.begin()}
-                );
+        bool all_ok = true;
+
+        for (const auto& target : targets) {
+            CompositeState target_state = state;
+            target_state.base_shape = target.shape;
+
+            HCURSOR hMaster = nullptr;
+            {
+                std::lock_guard<std::mutex> lock(mutex_);
+                hMaster = get_or_create_master_cursor_locked(target_state);
+            }
+
+            if (!hMaster) {
+                all_ok = false;
+                continue;
+            }
+
+            HCURSOR hCopy = duplicate_cursor_for_system(hMaster);
+            if (!hCopy) {
+                all_ok = false;
+                continue;
+            }
+
+            if (dry_run) {
+                DestroyIcon(hCopy);
+                continue;
+            }
+
+            const BOOL ok = SetSystemCursor(hCopy, target.ocr_id);
+            if (!ok) {
+                DestroyIcon(hCopy);
+                all_ok = false;
             }
         }
 
-        HCURSOR hCopy = duplicate_cursor_for_system(hMaster);
-        if (!hCopy) {
-            return false;
-        }
+        return all_ok;
+    }
 
-        if (dry_run) {
-            DestroyIcon(hCopy);
-            return true;
-        }
+    /// Configures whether dynamic visual states synchronize across multiple system cursor slots.
+    void set_multi_slot_sync(bool enabled) noexcept {
+        multi_slot_sync_ = enabled;
+    }
 
-        const BOOL ok = SetSystemCursor(hCopy, OCR_NORMAL);
-        if (!ok) {
-            DestroyIcon(hCopy);
-            return false;
-        }
-
-        return true;
+    /// Returns whether multi-slot synchronization is active.
+    [[nodiscard]] bool multi_slot_sync() const noexcept {
+        return multi_slot_sync_;
     }
 
     /// Clears all cached master cursor handles.
@@ -160,8 +180,39 @@ private:
         std::list<uint64_t>::iterator order_it;
     };
 
+    HCURSOR get_or_create_master_cursor_locked(const CompositeState& state) {
+        const uint64_t state_hash = state.compute_hash();
+        auto it = cache_map_.find(state_hash);
+        if (it != cache_map_.end()) {
+            lru_order_.erase(it->second.order_it);
+            lru_order_.push_front(state_hash);
+            it->second.order_it = lru_order_.begin();
+            return it->second.cursor.get();
+        }
+
+        UniqueCursor master_cursor = BitmapCompositor::compose(state, canvas_size_);
+        if (!master_cursor) {
+            return nullptr;
+        }
+        HCURSOR hMaster = master_cursor.get();
+
+        if (cache_map_.size() >= capacity_) {
+            const uint64_t oldest_hash = lru_order_.back();
+            lru_order_.pop_back();
+            cache_map_.erase(oldest_hash);
+        }
+
+        lru_order_.push_front(state_hash);
+        cache_map_.emplace(
+            state_hash,
+            CacheEntry{std::move(master_cursor), lru_order_.begin()}
+        );
+        return hMaster;
+    }
+
     int canvas_size_{kDefaultCanvasSize};
     size_t capacity_{kDefaultCapacity};
+    bool multi_slot_sync_{true};
     mutable std::mutex mutex_;
     std::unordered_map<uint64_t, CacheEntry> cache_map_;
     std::list<uint64_t> lru_order_;

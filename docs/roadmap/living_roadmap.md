@@ -87,11 +87,16 @@ With the Phase 2 production native engine established, Phase 3 prioritizes visua
   - Overlay Tuning: Calibrated companion overlay minimum card width from 200px down to 88px (`std::clamp(text_w + 44, 88, 360)`) and adjusted clearance offsets from 18px to 24px (`kOverlayOffsetX = 24`, `kOverlayOffsetY = 24`).
   - Empirical Verification: Verified in `tests/test_native_core.cpp` (Test 7) and `tests/test_e2e_daemon.py`. Pixel inspection verified zero overlap with pointer silhouette, transparent stem separation gap, and complete removal of old dead space.
 
-- **Task 3.2: Per-Monitor DPI Scaling Awareness**
+- **Task 3.2: Multi-Slot System Cursor Synchronization & Hotspot Calibration**
+  - Problem: Assigning composite handles solely to `OCR_NORMAL` left other standard system slots (`OCR_IBEAM`, `OCR_HAND`) reverting to default untinted monochrome carets when hovering over text editors (such as VS Code) or hyperlinks.
+  - Solution: Extended `BitmapCompositor` with `kIBeamMask`, `kHandMask`, and `compute_hotspot()` to dynamically calculate exact click anchor points (`(7 * scale, 9 * scale)` for text carets, `(5 * scale, 0)` for link hands). Added `multi_slot_sync` to `HardwareCursorDriver` to propagate composite tints and status badges simultaneously across `OCR_NORMAL`, `OCR_IBEAM`, and `OCR_HAND`.
+  - Verification: Verified in `tests/test_native_core.cpp` (Test 8) with hotspot geometry validation, dry-run multi-handle LRU caching, and seamless `SPI_SETCURSORS` restoration.
+
+- **Task 3.3: Per-Monitor DPI Scaling Awareness**
   - Investigate `CreateIconIndirect` bitmap scaling behavior across mixed DPI setups (such as 100% and 150% displays).
   - Handle `WM_DPICHANGED` messages to scale the hardware canvas dynamically between `64x64`, `96x96`, and `128x128` pixels based on active monitor scaling metrics.
 
-- **Task 3.3: Expanded Feeder Integrations**
+- **Task 3.4: Expanded Feeder Integrations**
   - Author reference feeder bridges for Active Desktop Context Engine, browser media playback status, and IDE background compilation watchers.
   - Provide minimal PowerShell and C# feeder client snippets.
 

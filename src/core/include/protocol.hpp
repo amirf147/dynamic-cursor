@@ -29,7 +29,9 @@ constexpr size_t kFrameHeaderSize = 4;
 enum class BaseShape : uint8_t {
     DefaultArrow = 0,
     PrecisionCross = 1,
-    ReadingMinimal = 2
+    ReadingMinimal = 2,
+    TextIBeam = 3,
+    HandPoint = 4
 };
 
 /// Corner badge sprite identifiers rendered in the lower-right quadrant.
@@ -119,6 +121,12 @@ constexpr void encode_frame_length(uint32_t length, uint8_t* out_header_bytes) n
     }
     if (name == "reading_minimal" || name == "reading" || name == "minimal" || name == "2") {
         return BaseShape::ReadingMinimal;
+    }
+    if (name == "text_ibeam" || name == "ibeam" || name == "text" || name == "3") {
+        return BaseShape::TextIBeam;
+    }
+    if (name == "hand_point" || name == "hand" || name == "link" || name == "4") {
+        return BaseShape::HandPoint;
     }
     return std::nullopt;
 }
@@ -620,7 +628,7 @@ inline bool parse_json_frame(std::string_view json_str, LayerPayload& out_payloa
             }
         } else if (shape_node->type == json_internal::ValueType::Number) {
             const auto s = static_cast<uint8_t>(shape_node->num_val);
-            if (s <= static_cast<uint8_t>(BaseShape::ReadingMinimal)) {
+            if (s <= static_cast<uint8_t>(BaseShape::HandPoint)) {
                 out_payload.shape = static_cast<BaseShape>(s);
                 out_payload.has_shape = true;
             }

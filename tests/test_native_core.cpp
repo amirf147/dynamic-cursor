@@ -201,6 +201,7 @@ bool test_lru_cache_and_eviction() {
 
     constexpr size_t kCapacity = 2;
     HardwareCursorDriver driver(32, kCapacity);
+    driver.set_multi_slot_sync(false);
     TEST_ASSERT(driver.capacity() == kCapacity);
     TEST_ASSERT(driver.cached_count() == 0);
 
@@ -462,6 +463,97 @@ bool test_tight_proximity_anchoring() {
     return true;
 }
 
+bool test_multi_slot_hardware_compositing_and_hotspots() {
+    std::cout << "[Test 8] Multi-slot hardware cursor compositing and hotspot calibration\n";
+
+    // Subtest A: Hotspot geometry calculations
+    const auto [arrow_hx, arrow_hy] = compute_hotspot(BaseShape::DefaultArrow, 1);
+    TEST_ASSERT(arrow_hx == 0 && arrow_hy == 0);
+
+    const auto [cross_hx, cross_hy] = compute_hotspot(BaseShape::PrecisionCross, 1);
+    TEST_ASSERT(cross_hx == 10 && cross_hy == 10);
+
+    const auto [read_hx, read_hy] = compute_hotspot(BaseShape::ReadingMinimal, 1);
+    TEST_ASSERT(read_hx == 8 && read_hy == 9);
+
+    const auto [ibeam_hx, ibeam_hy] = compute_hotspot(BaseShape::TextIBeam, 1);
+    TEST_ASSERT(ibeam_hx == 7 && ibeam_hy == 9);
+
+    const auto [hand_hx, hand_hy] = compute_hotspot(BaseShape::HandPoint, 1);
+    TEST_ASSERT(hand_hx == 5 && hand_hy == 0);
+
+    // Scale 2 high-DPI hotspots
+    const auto [ibeam2_hx, ibeam2_hy] = compute_hotspot(BaseShape::TextIBeam, 2);
+    TEST_ASSERT(ibeam2_hx == 14 && ibeam2_hy == 18);
+
+    const auto [hand2_hx, hand2_hy] = compute_hotspot(BaseShape::HandPoint, 2);
+    TEST_ASSERT(hand2_hx == 10 && hand2_hy == 0);
+
+    // Subtest B: Procedural composition and ICONINFO hotspot assignments
+    CompositeState ibeam_state{};
+    ibeam_state.base_shape = BaseShape::TextIBeam;
+    ibeam_state.tint_argb = 0xFF44FF66;
+    ibeam_state.badge = BadgeId::MicOn;
+
+    UniqueCursor ibeam_cursor = BitmapCompositor::compose(ibeam_state, 64);
+    TEST_ASSERT(ibeam_cursor.get() != nullptr);
+
+    ICONINFO ii_ibeam{};
+    BOOL ok = GetIconInfo(ibeam_cursor.get(), &ii_ibeam);
+    TEST_ASSERT(ok != FALSE);
+    TEST_ASSERT(ii_ibeam.xHotspot == 7 && ii_ibeam.yHotspot == 9);
+    if (ii_ibeam.hbmColor) DeleteObject(ii_ibeam.hbmColor);
+    if (ii_ibeam.hbmMask) DeleteObject(ii_ibeam.hbmMask);
+
+    CompositeState hand_state{};
+    hand_state.base_shape = BaseShape::HandPoint;
+    hand_state.tint_argb = 0xFFFF5555;
+    hand_state.badge = BadgeId::MicOff;
+
+    UniqueCursor hand_cursor = BitmapCompositor::compose(hand_state, 64);
+    TEST_ASSERT(hand_cursor.get() != nullptr);
+
+    ICONINFO ii_hand{};
+    ok = GetIconInfo(hand_cursor.get(), &ii_hand);
+    TEST_ASSERT(ok != FALSE);
+    TEST_ASSERT(ii_hand.xHotspot == 5 && ii_hand.yHotspot == 0);
+    if (ii_hand.hbmColor) DeleteObject(ii_hand.hbmColor);
+    if (ii_hand.hbmMask) DeleteObject(ii_hand.hbmMask);
+
+    // Subtest C: Badge anchor calculations for new shapes
+    const auto [ibeam_bx, ibeam_by] = compute_badge_anchor(BaseShape::TextIBeam, 1);
+    TEST_ASSERT(ibeam_bx == 14 && ibeam_by == 10);
+
+    const auto [hand_bx, hand_by] = compute_badge_anchor(BaseShape::HandPoint, 1);
+    TEST_ASSERT(hand_bx == 16 && hand_by == 12);
+
+    // Subtest D: Multi-slot driver synchronization in dry-run mode
+    HardwareCursorDriver driver(64, 64);
+    TEST_ASSERT(driver.multi_slot_sync() == true);
+
+    CompositeState sync_state{};
+    sync_state.base_shape = BaseShape::DefaultArrow;
+    sync_state.tint_argb = 0xFF44FF66;
+    sync_state.badge = BadgeId::MicOn;
+
+    const bool apply_ok = driver.apply_state(sync_state, true /* dry_run */);
+    TEST_ASSERT(apply_ok);
+    // Multi-slot sync should pre-compose and cache all 3 synchronized slots
+    TEST_ASSERT(driver.cached_count() == 3);
+
+    // Disable multi-slot sync and verify single slot application
+    driver.set_multi_slot_sync(false);
+    TEST_ASSERT(!driver.multi_slot_sync());
+    driver.clear_cache();
+    TEST_ASSERT(driver.cached_count() == 0);
+
+    const bool single_ok = driver.apply_state(sync_state, true /* dry_run */);
+    TEST_ASSERT(single_ok);
+    TEST_ASSERT(driver.cached_count() == 1);
+
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -500,6 +592,11 @@ int main() {
 
     if (!test_tight_proximity_anchoring()) {
         std::cerr << "FAILED: Tight proximity anchoring test\n";
+        return 1;
+    }
+
+    if (!test_multi_slot_hardware_compositing_and_hotspots()) {
+        std::cerr << "FAILED: Multi-slot hardware compositing and hotspots test\n";
         return 1;
     }
 

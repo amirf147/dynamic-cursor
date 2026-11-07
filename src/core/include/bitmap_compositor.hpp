@@ -24,6 +24,16 @@
 #include <utility>
 #include <vector>
 
+#ifndef OCR_NORMAL
+#define OCR_NORMAL 32512
+#endif
+#ifndef OCR_IBEAM
+#define OCR_IBEAM 32513
+#endif
+#ifndef OCR_HAND
+#define OCR_HAND 32649
+#endif
+
 namespace dynamic_cursor {
 
 /// Calculates 32-bit pre-multiplied ARGB channel values.
@@ -67,6 +77,45 @@ inline constexpr const char* kArrowMask[19] = {
     "      X..X      ",
     "      X..X      ",
     "       XX       "
+};
+
+inline constexpr const char* kIBeamMask[15] = {
+    "XXXXXXX",
+    "X.....X",
+    " XX.XX ",
+    "  X.X  ",
+    "  X.X  ",
+    "  X.X  ",
+    "  X.X  ",
+    "  X.X  ",
+    "  X.X  ",
+    "  X.X  ",
+    "  X.X  ",
+    "  X.X  ",
+    " XX.XX ",
+    "X.....X",
+    "XXXXXXX"
+};
+
+inline constexpr const char* kHandMask[18] = {
+    "     XX         ",
+    "    X..X        ",
+    "    X..X        ",
+    "    X..X        ",
+    "    X..X  XX    ",
+    " XX X..X X..X   ",
+    "X..XX..XX..X XX ",
+    "X...X..X..XX..X ",
+    " X..X.........X ",
+    "  X...........X ",
+    "  X...........X ",
+    "   X..........X ",
+    "   X..........X ",
+    "    X........X  ",
+    "    X........X  ",
+    "     X......X   ",
+    "     X......X   ",
+    "      XXXXXX    "
 };
 
 inline void set_pixel(uint32_t* buffer, int width, int height, int x, int y, uint32_t color) noexcept {
@@ -223,6 +272,89 @@ inline void draw_reading_minimal(uint32_t* buffer, int width, int height, uint32
     detail::set_pixel(buffer, width, height, cx + bar_len + 1, 17 * scale, border_color);
 }
 
+/// Renders classic crisp text I-beam caret directly into buffer.
+inline void draw_ibeam(uint32_t* buffer, int width, int height, uint32_t tint_argb) noexcept {
+    if (buffer == nullptr || width <= 0 || height <= 0) {
+        return;
+    }
+
+    uint32_t fill_color = 0xFFFFFFFF;
+    if (tint_argb != 0) {
+        if ((tint_argb & 0xFF000000) == 0) {
+            tint_argb |= 0xFF000000;
+        }
+        fill_color = premultiply_argb(tint_argb);
+    }
+    constexpr uint32_t border_color = 0xFF000000;
+
+    const int scale = (width >= 128) ? 2 : 1;
+    const int x0 = 4 * scale;
+    const int y0 = 2 * scale;
+
+    for (int y = 0; y < 15; ++y) {
+        for (int x = 0; x < 7; ++x) {
+            const char c = detail::kIBeamMask[y][x];
+            if (c == ' ') {
+                continue;
+            }
+            const uint32_t color = (c == 'X') ? border_color : fill_color;
+            for (int dy = 0; dy < scale; ++dy) {
+                const int py = y0 + y * scale + dy;
+                if (py >= height) {
+                    break;
+                }
+                for (int dx = 0; dx < scale; ++dx) {
+                    const int px = x0 + x * scale + dx;
+                    if (px >= width) {
+                        break;
+                    }
+                    buffer[py * width + px] = color;
+                }
+            }
+        }
+    }
+}
+
+/// Renders classic crisp link selection hand directly into buffer.
+inline void draw_hand(uint32_t* buffer, int width, int height, uint32_t tint_argb) noexcept {
+    if (buffer == nullptr || width <= 0 || height <= 0) {
+        return;
+    }
+
+    uint32_t fill_color = 0xFFFFFFFF;
+    if (tint_argb != 0) {
+        if ((tint_argb & 0xFF000000) == 0) {
+            tint_argb |= 0xFF000000;
+        }
+        fill_color = premultiply_argb(tint_argb);
+    }
+    constexpr uint32_t border_color = 0xFF000000;
+
+    const int scale = (width >= 128) ? 2 : 1;
+    for (int y = 0; y < 18; ++y) {
+        for (int x = 0; x < 16; ++x) {
+            const char c = detail::kHandMask[y][x];
+            if (c == ' ') {
+                continue;
+            }
+            const uint32_t color = (c == 'X') ? border_color : fill_color;
+            for (int dy = 0; dy < scale; ++dy) {
+                const int py = y * scale + dy;
+                if (py >= height) {
+                    break;
+                }
+                for (int dx = 0; dx < scale; ++dx) {
+                    const int px = x * scale + dx;
+                    if (px >= width) {
+                        break;
+                    }
+                    buffer[py * width + px] = color;
+                }
+            }
+        }
+    }
+}
+
 /// Calculates tight proximity anchor (x0, y0) based on base pointer silhouette and display scale.
 [[nodiscard]] inline constexpr std::pair<int, int> compute_badge_anchor(BaseShape shape, int scale = 1) noexcept {
     const int s = (scale > 0) ? scale : 1;
@@ -231,9 +363,31 @@ inline void draw_reading_minimal(uint32_t* buffer, int width, int height, uint32
             return {14 * s, 14 * s};
         case BaseShape::ReadingMinimal:
             return {14 * s, 8 * s};
+        case BaseShape::TextIBeam:
+            return {14 * s, 10 * s};
+        case BaseShape::HandPoint:
+            return {16 * s, 12 * s};
         case BaseShape::DefaultArrow:
         default:
             return {14 * s, 12 * s};
+    }
+}
+
+/// Calculates precise hotspot coordinates (xHotspot, yHotspot) matching the shape geometry.
+[[nodiscard]] inline constexpr std::pair<uint32_t, uint32_t> compute_hotspot(BaseShape shape, int scale = 1) noexcept {
+    const int s = (scale > 0) ? scale : 1;
+    switch (shape) {
+        case BaseShape::PrecisionCross:
+            return {static_cast<uint32_t>(10 * s), static_cast<uint32_t>(10 * s)};
+        case BaseShape::ReadingMinimal:
+            return {static_cast<uint32_t>(8 * s), static_cast<uint32_t>(9 * s)};
+        case BaseShape::TextIBeam:
+            return {static_cast<uint32_t>(7 * s), static_cast<uint32_t>(9 * s)};
+        case BaseShape::HandPoint:
+            return {static_cast<uint32_t>(5 * s), 0};
+        case BaseShape::DefaultArrow:
+        default:
+            return {0, 0};
     }
 }
 
@@ -536,6 +690,12 @@ public:
             case BaseShape::ReadingMinimal:
                 draw_reading_minimal(pixel_buffer, canvas_size, canvas_size, state.tint_argb);
                 break;
+            case BaseShape::TextIBeam:
+                draw_ibeam(pixel_buffer, canvas_size, canvas_size, state.tint_argb);
+                break;
+            case BaseShape::HandPoint:
+                draw_hand(pixel_buffer, canvas_size, canvas_size, state.tint_argb);
+                break;
             case BaseShape::DefaultArrow:
             default:
                 draw_arrow(pixel_buffer, canvas_size, canvas_size, state.tint_argb);
@@ -564,10 +724,12 @@ public:
             return UniqueCursor{};
         }
 
+        const auto [hx, hy] = compute_hotspot(state.base_shape, scale);
+
         ICONINFO icon_info = {};
         icon_info.fIcon = FALSE;
-        icon_info.xHotspot = 0;
-        icon_info.yHotspot = 0;
+        icon_info.xHotspot = hx;
+        icon_info.yHotspot = hy;
         icon_info.hbmMask = hbmMask;
         icon_info.hbmColor = hbmColor;
 

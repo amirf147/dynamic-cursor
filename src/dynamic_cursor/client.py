@@ -80,6 +80,8 @@ class BaseShape(IntEnum):
     DEFAULT_ARROW = 0
     PRECISION_CROSS = 1
     READING_MINIMAL = 2
+    TEXT_IBEAM = 3
+    HAND_POINT = 4
 
 
 class BadgeId(IntEnum):
@@ -143,7 +145,7 @@ def normalize_shape(shape: Union[str, int, BaseShape, None]) -> int:
     if isinstance(shape, BaseShape):
         return int(shape.value)
     if isinstance(shape, int):
-        return shape if 0 <= shape <= 2 else 0
+        return shape if 0 <= shape <= 4 else 0
 
     name = str(shape).strip().lower()
     mapping = {
@@ -158,6 +160,14 @@ def normalize_shape(shape: Union[str, int, BaseShape, None]) -> int:
         "reading": 2,
         "minimal": 2,
         "2": 2,
+        "text_ibeam": 3,
+        "ibeam": 3,
+        "text": 3,
+        "3": 3,
+        "hand_point": 4,
+        "hand": 4,
+        "link": 4,
+        "4": 4,
     }
     return mapping.get(name, 0)
 
