@@ -9,8 +9,15 @@ long-running tasks followed by an ephemeral completion toast.
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import sys
 import time
+
+# Ensure local src/ package directory is importable without requiring manual PYTHONPATH
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SRC_DIR = REPO_ROOT / "src"
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
 from dynamic_cursor.client import DynamicCursorClient
 

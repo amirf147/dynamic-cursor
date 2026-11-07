@@ -81,10 +81,11 @@ All Phase 2 implementation tasks have been completed and verified across native 
 
 With the Phase 2 production native engine established, Phase 3 prioritizes visual polish, tight proximity anchoring, and display fidelity before investigating complex animated frames:
 
-- **Task 3.1: Tight Proximity Anchoring & Spacing Calibration (Near-Term Priority)**
-  - Problem: The current `64x64` canvas places standard `16x19` pointer shapes at `(0, 0)` while corner badges reside at `(width - 20, height - 20)` (`(44, 44)`). This introduces an excessive 32-pixel diagonal gap between the cursor tail and the visual indicator.
-  - Objective: Anchor badges directly adjacent to the pointer body bounds (e.g., `x = 14`, `y = 12`) to produce a sleek, compact visual silhouette without dead space.
-  - Calibrate the companion overlay offset and minimum card width to eliminate excessive padding around short text strings.
+- **Task 3.1: Tight Proximity Anchoring & Spacing Calibration**
+  - Problem: The original `64x64` canvas placed standard `16x19` pointer shapes at `(0, 0)` while corner badges resided at `(width - 20, height - 20)` (`(44, 44)`). This introduced an excessive 43-pixel diagonal gap between the cursor tail and the visual indicator.
+  - Solution: Implemented `compute_badge_anchor()` to anchor badges directly adjacent to active pointer bounds (`(14 * scale, 12 * scale)` for arrow, `(14 * scale, 14 * scale)` for crosshair, `(14 * scale, 8 * scale)` for reading caret). Calibrated progress track position dynamically based on badge presence (`y0 = 32 * scale` with badge, `y0 = 24 * scale` without badge).
+  - Overlay Tuning: Calibrated companion overlay minimum card width from 200px down to 88px (`std::clamp(text_w + 44, 88, 360)`) and adjusted clearance offsets from 18px to 24px (`kOverlayOffsetX = 24`, `kOverlayOffsetY = 24`).
+  - Empirical Verification: Verified in `tests/test_native_core.cpp` (Test 7) and `tests/test_e2e_daemon.py`. Pixel inspection verified zero overlap with pointer silhouette, transparent stem separation gap, and complete removal of old dead space.
 
 - **Task 3.2: Per-Monitor DPI Scaling Awareness**
   - Investigate `CreateIconIndirect` bitmap scaling behavior across mixed DPI setups (such as 100% and 150% displays).

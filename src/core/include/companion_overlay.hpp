@@ -99,6 +99,11 @@ public:
     static constexpr UINT WM_OVERLAY_SHOW_HUD = WM_APP + 105;
     static constexpr UINT WM_OVERLAY_REPOSITION = WM_APP + 106;
 
+    static constexpr int kOverlayOffsetX = 24;
+    static constexpr int kOverlayOffsetY = 24;
+    static constexpr int kMinCardWidth = 88;
+    static constexpr int kMaxCardWidth = 360;
+
     /// Spawns a dedicated background UI thread and waits for window creation to complete.
     CompanionOverlay() {
         ready_event_.reset(CreateEventW(nullptr, TRUE, FALSE, nullptr));
@@ -284,7 +289,7 @@ private:
             style,
             0,
             0,
-            200,
+            kMinCardWidth,
             40,
             nullptr,
             nullptr,
@@ -373,8 +378,8 @@ private:
                         SetWindowPos(
                             hwnd,
                             nullptr,
-                            pt.x + 18,
-                            pt.y + 18,
+                            pt.x + kOverlayOffsetX,
+                            pt.y + kOverlayOffsetY,
                             0,
                             0,
                             SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE
@@ -499,7 +504,7 @@ private:
             pt.x = 100;
             pt.y = 100;
         }
-        render_and_present_card(text, -1.0f, pt.x + 18, pt.y + 18, duration_ms);
+        render_and_present_card(text, -1.0f, pt.x + kOverlayOffsetX, pt.y + kOverlayOffsetY, duration_ms);
     }
 
     /// Renders and displays HUD card at current cursor position.
@@ -512,7 +517,7 @@ private:
             pt.x = 100;
             pt.y = 100;
         }
-        render_and_present_card(text, progress, pt.x + 18, pt.y + 18, 0);
+        render_and_present_card(text, progress, pt.x + kOverlayOffsetX, pt.y + kOverlayOffsetY, 0);
     }
 
     /// Composites card graphics, measures text, and updates layered window.
@@ -555,7 +560,7 @@ private:
         DeleteDC(hdc_measure);
 
         const int text_w = rc_calc.right - rc_calc.left;
-        const int card_w = std::clamp(text_w + 54, 200, 360);
+        const int card_w = std::clamp(text_w + 44, kMinCardWidth, kMaxCardWidth);
         const int card_h = has_progress ? 46 : 38;
 
         BITMAPINFO bmi{};

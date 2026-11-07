@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace dynamic_cursor {
@@ -222,15 +223,42 @@ inline void draw_reading_minimal(uint32_t* buffer, int width, int height, uint32
     detail::set_pixel(buffer, width, height, cx + bar_len + 1, 17 * scale, border_color);
 }
 
-/// Renders bottom-right 16x16 icon at [width - 20, height - 20] to [width - 4, height - 4].
-inline void draw_badge(uint32_t* buffer, int width, int height, BadgeId badge) noexcept {
+/// Calculates tight proximity anchor (x0, y0) based on base pointer silhouette and display scale.
+[[nodiscard]] inline constexpr std::pair<int, int> compute_badge_anchor(BaseShape shape, int scale = 1) noexcept {
+    const int s = (scale > 0) ? scale : 1;
+    switch (shape) {
+        case BaseShape::PrecisionCross:
+            return {14 * s, 14 * s};
+        case BaseShape::ReadingMinimal:
+            return {14 * s, 8 * s};
+        case BaseShape::DefaultArrow:
+        default:
+            return {14 * s, 12 * s};
+    }
+}
+
+/// Renders 16x16 icon at [x0, y0] to [x0 + 15, y0 + 15].
+/// If x0 or y0 is negative, computes anchor coordinates dynamically relative to the default arrow.
+inline void draw_badge(
+    uint32_t* buffer,
+    int width,
+    int height,
+    BadgeId badge,
+    int x0 = -1,
+    int y0 = -1
+) noexcept {
     if (buffer == nullptr || badge == BadgeId::None) {
         return;
     }
 
-    const int x0 = width - 20;
-    const int y0 = height - 20;
     if (x0 < 0 || y0 < 0) {
+        const int scale = (width >= 128) ? 2 : 1;
+        const auto [def_x, def_y] = compute_badge_anchor(BaseShape::DefaultArrow, scale);
+        x0 = def_x;
+        y0 = def_y;
+    }
+
+    if (x0 < 0 || y0 < 0 || x0 >= width || y0 >= height) {
         return;
     }
 
@@ -416,15 +444,26 @@ inline void draw_badge(uint32_t* buffer, int width, int height, BadgeId badge) n
     }
 }
 
-/// Renders compact 56x6 horizontal progress track at y=[34..39] with dark background and vibrant fill.
-inline void draw_progress(uint32_t* buffer, int width, int height, float ratio) noexcept {
-    if (buffer == nullptr || width <= 0 || height < 40) {
+/// Renders compact 56x6 horizontal progress track with dark background and vibrant fill.
+/// If custom_y0 is negative, defaults to y0 = 32 * scale (or y0 = 24 * scale if badge is absent).
+inline void draw_progress(
+    uint32_t* buffer,
+    int width,
+    int height,
+    float ratio,
+    int custom_y0 = -1
+) noexcept {
+    if (buffer == nullptr || width <= 0 || height <= 0) {
         return;
     }
 
     constexpr int kBarHeight = 6;
     constexpr int kBarWidth = 56;
-    constexpr int y0 = 34;
+    const int scale = (width >= 128) ? 2 : 1;
+    const int y0 = (custom_y0 >= 0) ? custom_y0 : (32 * scale);
+    if (y0 < 0 || y0 + kBarHeight > height) {
+        return;
+    }
     const int x0 = (width >= kBarWidth) ? ((width - kBarWidth) / 2) : 0;
 
     const float clamped_ratio = (ratio < 0.0f) ? 0.0f : (ratio > 1.0f ? 1.0f : ratio);
@@ -488,6 +527,8 @@ public:
         const size_t total_pixels = static_cast<size_t>(canvas_size * canvas_size);
         std::fill_n(pixel_buffer, total_pixels, 0x00000000U);
 
+        const int scale = (canvas_size >= 128) ? 2 : 1;
+
         switch (state.base_shape) {
             case BaseShape::PrecisionCross:
                 draw_precision_cross(pixel_buffer, canvas_size, canvas_size, state.tint_argb);
@@ -502,11 +543,13 @@ public:
         }
 
         if (state.badge != BadgeId::None) {
-            draw_badge(pixel_buffer, canvas_size, canvas_size, state.badge);
+            const auto [bx, by] = compute_badge_anchor(state.base_shape, scale);
+            draw_badge(pixel_buffer, canvas_size, canvas_size, state.badge, bx, by);
         }
 
         if (state.progress >= 0.0f) {
-            draw_progress(pixel_buffer, canvas_size, canvas_size, state.progress);
+            const int prog_y = (state.badge != BadgeId::None) ? (32 * scale) : (24 * scale);
+            draw_progress(pixel_buffer, canvas_size, canvas_size, state.progress, prog_y);
         }
 
         HBITMAP hbmMask = CreateBitmap(canvas_size, canvas_size, 1, 1, nullptr);

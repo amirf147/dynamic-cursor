@@ -385,6 +385,83 @@ bool test_named_pipe_and_lease_rollback() {
     return true;
 }
 
+bool test_tight_proximity_anchoring() {
+    std::cout << "[Test 7] Tight proximity anchoring and spacing calibration\n";
+
+    // Subtest A: Anchor coordinates calculation for base shapes
+    const auto [arr_x, arr_y] = compute_badge_anchor(BaseShape::DefaultArrow, 1);
+    TEST_ASSERT(arr_x == 14 && arr_y == 12);
+
+    const auto [cross_x, cross_y] = compute_badge_anchor(BaseShape::PrecisionCross, 1);
+    TEST_ASSERT(cross_x == 14 && cross_y == 14);
+
+    const auto [read_x, read_y] = compute_badge_anchor(BaseShape::ReadingMinimal, 1);
+    TEST_ASSERT(read_x == 14 && read_y == 8);
+
+    // Subtest B: High-DPI scale 2 calculation
+    const auto [scale_x, scale_y] = compute_badge_anchor(BaseShape::DefaultArrow, 2);
+    TEST_ASSERT(scale_x == 28 && scale_y == 24);
+
+    // Subtest C: In-memory pixel rasterization verification
+    CompositeState state{};
+    state.base_shape = BaseShape::DefaultArrow;
+    state.badge = BadgeId::MicOff;
+
+    UniqueCursor cursor = BitmapCompositor::compose(state, 64);
+    TEST_ASSERT(cursor.get() != nullptr);
+
+    ICONINFO ii{};
+    const BOOL info_ok = GetIconInfo(cursor.get(), &ii);
+    TEST_ASSERT(info_ok != FALSE);
+    TEST_ASSERT(ii.hbmColor != nullptr);
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = 64;
+    bmi.bmiHeader.biHeight = -64;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    std::vector<uint32_t> pixels(64 * 64, 0);
+    HDC hdc = GetDC(nullptr);
+    const int lines = GetDIBits(hdc, ii.hbmColor, 0, 64, pixels.data(), &bmi, DIB_RGB_COLORS);
+    ReleaseDC(nullptr, hdc);
+
+    if (ii.hbmColor) {
+        DeleteObject(ii.hbmColor);
+    }
+    if (ii.hbmMask) {
+        DeleteObject(ii.hbmMask);
+    }
+
+    TEST_ASSERT(lines == 64);
+
+    // Arrow tip at (0, 0) is non-zero
+    TEST_ASSERT(pixels[0 * 64 + 0] != 0);
+
+    // Arrow barb at (11, 11) is non-zero
+    TEST_ASSERT(pixels[11 * 64 + 11] != 0);
+
+    // Badge interior pixel at (21, 19) is non-zero (anchored at 14, 12)
+    TEST_ASSERT(pixels[19 * 64 + 21] != 0);
+
+    // Gap between arrow stem and badge at row 14 (x=11, 12) is transparent
+    TEST_ASSERT(pixels[14 * 64 + 11] == 0);
+    TEST_ASSERT(pixels[14 * 64 + 12] == 0);
+
+    // Old badge location (44, 44) is completely transparent
+    TEST_ASSERT(pixels[44 * 64 + 44] == 0);
+
+    // Subtest D: Companion overlay spacing constants
+    TEST_ASSERT(CompanionOverlay::kOverlayOffsetX == 24);
+    TEST_ASSERT(CompanionOverlay::kOverlayOffsetY == 24);
+    TEST_ASSERT(CompanionOverlay::kMinCardWidth == 88);
+    TEST_ASSERT(CompanionOverlay::kMaxCardWidth == 360);
+
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -418,6 +495,11 @@ int main() {
 
     if (!test_named_pipe_and_lease_rollback()) {
         std::cerr << "FAILED: Named pipe lease rollback test\n";
+        return 1;
+    }
+
+    if (!test_tight_proximity_anchoring()) {
+        std::cerr << "FAILED: Tight proximity anchoring test\n";
         return 1;
     }
 
