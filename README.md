@@ -7,6 +7,14 @@
 
 Dynamic Cursor is fully standalone with no hard dependencies on external software. External feeders can push visual state layers to the cursor in real time. Dynamic Cursor arbitrates layer priorities, composites 32-bit ARGB bitmaps in memory, and renders shapes, color tints, corner badges, compact loading bars, and pop-out micro-notifications with zero polling loops and zero display stutter. For existing ecosystem integrations, jump to [Integrations](#integrations).
 
+<p align="center">
+  <img src="docs/assets/demo_context_compositor.gif" alt="Dynamic Cursor context-aware pointer composition and companion toast" width="644" />
+</p>
+
+<p align="center">
+  <img src="docs/assets/demo_cli_progress_bar.gif" alt="Dynamic Cursor CLI task progress bar animation" width="682" />
+</p>
+
 ---
 
 ## Architecture Overview
@@ -168,6 +176,15 @@ python -m dynamic_cursor.client clear --layer mic
 
 # Purge all layers asserted by this connection
 python -m dynamic_cursor.client clear-all
+```
+
+### Task Progress & Build Notifier Example
+
+The companion utility [`examples/cli_notify.py`](examples/cli_notify.py) demonstrates streaming task progress percentages directly to the cursor indicator during command execution:
+
+```pwsh
+# Run simulated build task with dynamic cursor progress and completion toast
+python examples/cli_notify.py --steps 25 --delay 0.06
 ```
 
 ---
