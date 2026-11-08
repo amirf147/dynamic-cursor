@@ -114,6 +114,39 @@ bool test_binary_and_json_serialization() {
     LayerPayload invalid_payload{};
     TEST_ASSERT(!parse_json_frame("{\"invalid_json", invalid_payload, op_code));
 
+    // Subtest D: Expanded BadgeId enum parsing (WebGlobe, CodeBrackets, TerminalPrompt, DocWriting)
+    const std::vector<std::pair<std::string, BadgeId>> badge_pairs = {
+        {"web_globe", BadgeId::WebGlobe},
+        {"browser", BadgeId::WebGlobe},
+        {"code_brackets", BadgeId::CodeBrackets},
+        {"ide", BadgeId::CodeBrackets},
+        {"terminal_prompt", BadgeId::TerminalPrompt},
+        {"shell", BadgeId::TerminalPrompt},
+        {"doc_writing", BadgeId::DocWriting},
+        {"prose", BadgeId::DocWriting}
+    };
+    for (const auto& [name, expected] : badge_pairs) {
+        const auto parsed = badge_id_from_string(name);
+        TEST_ASSERT(parsed.has_value() && *parsed == expected);
+
+        std::string json = "{\"op\":\"upsert\",\"badge_id\":\"" + name + "\"}";
+        LayerPayload lp{};
+        uint8_t op = 0;
+        TEST_ASSERT(parse_json_frame(json, lp, op));
+        TEST_ASSERT(lp.has_badge && lp.badge == expected);
+    }
+
+    // Binary packet parsing for each new BadgeId
+    for (uint16_t b = 5; b <= 8; ++b) {
+        BinaryPacket bp{};
+        bp.magic = kBinaryPacketMagic;
+        bp.badge = b;
+        LayerPayload lp{};
+        uint8_t op = 0;
+        TEST_ASSERT(parse_binary_frame(reinterpret_cast<const uint8_t*>(&bp), sizeof(bp), lp, op));
+        TEST_ASSERT(lp.has_badge && static_cast<uint16_t>(lp.badge) == b);
+    }
+
     return true;
 }
 
@@ -605,6 +638,73 @@ bool test_multi_slot_hardware_compositing_and_hotspots() {
     return true;
 }
 
+bool test_expanded_badges_rasterization() {
+    std::cout << "[Test 9] Expanded procedural ARGB badge rasterization\n";
+
+    const std::vector<BadgeId> badges = {
+        BadgeId::WebGlobe,
+        BadgeId::CodeBrackets,
+        BadgeId::TerminalPrompt,
+        BadgeId::DocWriting
+    };
+
+    BITMAPINFO bmi{};
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = 64;
+    bmi.bmiHeader.biHeight = -64;
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;
+    bmi.bmiHeader.biCompression = BI_RGB;
+
+    for (BadgeId badge : badges) {
+        CompositeState state{};
+        state.base_shape = BaseShape::DefaultArrow;
+        state.badge = badge;
+
+        UniqueCursor cursor = BitmapCompositor::compose(state, 64);
+        TEST_ASSERT(cursor.get() != nullptr);
+
+        ICONINFO ii{};
+        const BOOL info_ok = GetIconInfo(cursor.get(), &ii);
+        TEST_ASSERT(info_ok != FALSE);
+        TEST_ASSERT(ii.hbmColor != nullptr);
+
+        std::vector<uint32_t> pixels(64 * 64, 0);
+        HDC hdc = GetDC(nullptr);
+        const int lines = GetDIBits(hdc, ii.hbmColor, 0, 64, pixels.data(), &bmi, DIB_RGB_COLORS);
+        ReleaseDC(nullptr, hdc);
+
+        if (ii.hbmColor) {
+            DeleteObject(ii.hbmColor);
+        }
+        if (ii.hbmMask) {
+            DeleteObject(ii.hbmMask);
+        }
+
+        TEST_ASSERT(lines == 64);
+
+        // Arrow tip at (0, 0) is non-zero
+        TEST_ASSERT(pixels[0 * 64 + 0] != 0);
+
+        // Badge area is [14, 12]..[29, 27] (16x16 pixels)
+        // Verify non-transparent pixels exist within this bounding region
+        int non_zero_badge_pixels = 0;
+        for (int y = 12; y <= 27; ++y) {
+            for (int x = 14; x <= 29; ++x) {
+                if (pixels[y * 64 + x] != 0) {
+                    ++non_zero_badge_pixels;
+                }
+            }
+        }
+        TEST_ASSERT(non_zero_badge_pixels > 25);
+
+        // Verify far corner (44, 44) remains completely transparent
+        TEST_ASSERT(pixels[44 * 64 + 44] == 0);
+    }
+
+    return true;
+}
+
 } // namespace
 
 int main() {
@@ -648,6 +748,11 @@ int main() {
 
     if (!test_multi_slot_hardware_compositing_and_hotspots()) {
         std::cerr << "FAILED: Multi-slot hardware compositing and hotspots test\n";
+        return 1;
+    }
+
+    if (!test_expanded_badges_rasterization()) {
+        std::cerr << "FAILED: Expanded procedural ARGB badge rasterization test\n";
         return 1;
     }
 

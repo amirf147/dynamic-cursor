@@ -92,6 +92,10 @@ class BadgeId(IntEnum):
     MIC_ON = 2
     TV_ICON = 3
     VIM_NORMAL = 4
+    WEB_GLOBE = 5
+    CODE_BRACKETS = 6
+    TERMINAL_PROMPT = 7
+    DOC_WRITING = 8
 
 
 class ProgressStyle(IntEnum):
@@ -187,7 +191,7 @@ def normalize_badge(badge: Union[str, int, BadgeId, None]) -> int:
     if isinstance(badge, BadgeId):
         return int(badge.value)
     if isinstance(badge, int):
-        return badge if 0 <= badge <= 4 else 0
+        return badge if 0 <= badge <= 8 else 0
 
     name = str(badge).strip().lower()
     mapping = {
@@ -207,6 +211,27 @@ def normalize_badge(badge: Union[str, int, BadgeId, None]) -> int:
         "vim_normal": 4,
         "vim": 4,
         "4": 4,
+        "web_globe": 5,
+        "web": 5,
+        "browser": 5,
+        "globe": 5,
+        "5": 5,
+        "code_brackets": 6,
+        "code": 6,
+        "ide": 6,
+        "editor": 6,
+        "6": 6,
+        "terminal_prompt": 7,
+        "terminal": 7,
+        "shell": 7,
+        "console": 7,
+        "7": 7,
+        "doc_writing": 8,
+        "writing": 8,
+        "document": 8,
+        "doc": 8,
+        "prose": 8,
+        "8": 8,
     }
     return mapping.get(name, 0)
 
@@ -541,7 +566,17 @@ def build_cli_parser() -> argparse.ArgumentParser:
         "--badge",
         type=str,
         default=None,
-        choices=["none", "mic_off", "mic_on", "tv_icon", "vim_normal"],
+        choices=[
+            "none",
+            "mic_off",
+            "mic_on",
+            "tv_icon",
+            "vim_normal",
+            "web_globe",
+            "code_brackets",
+            "terminal_prompt",
+            "doc_writing",
+        ],
         help="Corner badge sprite identifier.",
     )
     set_parser.add_argument(

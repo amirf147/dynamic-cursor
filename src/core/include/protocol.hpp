@@ -40,7 +40,11 @@ enum class BadgeId : uint16_t {
     MicOff = 1,
     MicOn = 2,
     TvIcon = 3,
-    VimNormal = 4
+    VimNormal = 4,
+    WebGlobe = 5,
+    CodeBrackets = 6,
+    TerminalPrompt = 7,
+    DocWriting = 8
 };
 
 /// Progress presentation styles.
@@ -158,6 +162,18 @@ constexpr void encode_frame_length(uint32_t length, uint8_t* out_header_bytes) n
     }
     if (name == "vim_normal" || name == "vim" || name == "4") {
         return BadgeId::VimNormal;
+    }
+    if (name == "web_globe" || name == "web" || name == "browser" || name == "globe" || name == "5") {
+        return BadgeId::WebGlobe;
+    }
+    if (name == "code_brackets" || name == "code" || name == "ide" || name == "editor" || name == "6") {
+        return BadgeId::CodeBrackets;
+    }
+    if (name == "terminal_prompt" || name == "terminal" || name == "shell" || name == "console" || name == "7") {
+        return BadgeId::TerminalPrompt;
+    }
+    if (name == "doc_writing" || name == "writing" || name == "document" || name == "doc" || name == "prose" || name == "8") {
+        return BadgeId::DocWriting;
     }
     return std::nullopt;
 }
@@ -573,7 +589,7 @@ inline bool parse_binary_frame(const uint8_t* data, size_t length, LayerPayload&
         out_payload.has_tint = false;
     }
 
-    if (packet->badge <= static_cast<uint16_t>(BadgeId::VimNormal)) {
+    if (packet->badge <= static_cast<uint16_t>(BadgeId::DocWriting)) {
         out_payload.badge = static_cast<BadgeId>(packet->badge);
         out_payload.has_badge = (out_payload.badge != BadgeId::None);
     } else {
@@ -707,7 +723,7 @@ inline bool parse_json_frame(std::string_view json_str, LayerPayload& out_payloa
             }
         } else if (badge_node->type == json_internal::ValueType::Number) {
             const auto b = static_cast<uint16_t>(badge_node->num_val);
-            if (b <= static_cast<uint16_t>(BadgeId::VimNormal)) {
+            if (b <= static_cast<uint16_t>(BadgeId::DocWriting)) {
                 out_payload.badge = static_cast<BadgeId>(b);
                 out_payload.has_badge = (out_payload.badge != BadgeId::None);
             }

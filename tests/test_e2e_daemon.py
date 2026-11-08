@@ -666,6 +666,67 @@ def test_cli_subcommands_parser() -> None:
     assert args_toast.duration == 2000
 
 
+def test_expanded_badges_protocol_e2e() -> None:
+    """Verifies that all expanded badges transmit and decode in JSON and binary modes."""
+    from dynamic_cursor.client import normalize_badge
+
+    # Verify badge normalization with string aliases and enums
+    assert normalize_badge("web_globe") == 5
+    assert normalize_badge("web") == 5
+    assert normalize_badge("browser") == 5
+    assert normalize_badge("code_brackets") == 6
+    assert normalize_badge("ide") == 6
+    assert normalize_badge("terminal_prompt") == 7
+    assert normalize_badge("terminal") == 7
+    assert normalize_badge("shell") == 7
+    assert normalize_badge("doc_writing") == 8
+    assert normalize_badge("writing") == 8
+    assert normalize_badge("document") == 8
+    assert normalize_badge(BadgeId.WEB_GLOBE) == 5
+    assert normalize_badge(BadgeId.DOC_WRITING) == 8
+
+    test_pipe = r"\\.\pipe\test_dynamic_cursor_expanded_badges"
+    server = MockPipeCompositorServer(test_pipe)
+    server.start()
+
+    try:
+        badge_specs = [
+            ("web_globe", BadgeId.WEB_GLOBE),
+            ("code_brackets", BadgeId.CODE_BRACKETS),
+            ("terminal_prompt", BadgeId.TERMINAL_PROMPT),
+            ("doc_writing", BadgeId.DOC_WRITING),
+        ]
+
+        with DynamicCursorClient(pipe_name=test_pipe) as client:
+            # 1. JSON mode transmission
+            for name, badge_enum in badge_specs:
+                client.set_layer(
+                    layer_id="expanded_badge_json",
+                    priority=50,
+                    badge_id=name,
+                    use_binary=False,
+                )
+                time.sleep(0.05)
+                with server.lock:
+                    comp = dict(server.composite)
+                assert comp["badge_id"] == name
+
+            # 2. Binary mode transmission
+            for name, badge_enum in badge_specs:
+                client.set_layer(
+                    layer_id="expanded_badge_bin",
+                    priority=60,
+                    badge_id=name,
+                    use_binary=True,
+                )
+                time.sleep(0.05)
+                with server.lock:
+                    comp = dict(server.composite)
+                assert comp["badge_id"] == badge_enum
+    finally:
+        server.stop()
+
+
 def test_caster_mic_feeder_integration() -> None:
     """Verifies that CasterMicFeeder drives state layer transitions."""
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))

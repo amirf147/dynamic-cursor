@@ -86,7 +86,7 @@ struct BinaryPacket {
     uint32_t magic{0x44435552}; // "DCUR" in ASCII / little-endian
     uint8_t  op{1};             // Operation: 1=Upsert, 2=Remove, 3=Clear
     uint8_t  shape{0};          // BaseShape: 0=DefaultArrow, 1=PrecisionCross, 2=ReadingMinimal
-    uint16_t badge{0};          // BadgeId: 0=None, 1=MicOff, 2=MicOn, 3=TvIcon, 4=VimNormal
+    uint16_t badge{0};          // BadgeId: 0=None, 1=MicOff, 2=MicOn, 3=TvIcon, 4=VimNormal, 5=WebGlobe, 6=CodeBrackets, 7=TerminalPrompt, 8=DocWriting
     int32_t  priority{0};       // Arbitration priority integer (signed)
     uint32_t tint_argb{0};      // 32-bit pre-multiplied ARGB color
     float    progress{-1.0f};   // Progress ratio [0.0, 1.0], or negative for inactive
@@ -104,7 +104,7 @@ struct BinaryPacket {
 | `0x00` | `magic` | `uint32_t` | 4 bytes | `0x44435552` (ASCII characters `DCUR`). Rejects frame if mismatched. |
 | `0x04` | `op` | `uint8_t` | 1 byte | `1` = `Upsert`, `2` = `Remove`, `3` = `Clear`. Defaults to `1`. |
 | `0x05` | `shape` | `uint8_t` | 1 byte | `0` = `DefaultArrow`, `1` = `PrecisionCross`, `2` = `ReadingMinimal`. Values > 2 are ignored. |
-| `0x06` | `badge` | `uint16_t` | 2 bytes | `0` = `None`, `1` = `MicOff`, `2` = `MicOn`, `3` = `TvIcon`, `4` = `VimNormal`. |
+| `0x06` | `badge` | `uint16_t` | 2 bytes | `0` = `None`, `1` = `MicOff`, `2` = `MicOn`, `3` = `TvIcon`, `4` = `VimNormal`, `5` = `WebGlobe`, `6` = `CodeBrackets`, `7` = `TerminalPrompt`, `8` = `DocWriting`. |
 | `0x08` | `priority` | `int32_t` | 4 bytes | Layer arbitration priority (higher values override lower values). |
 | `0x0C` | `tint_argb` | `uint32_t` | 4 bytes | 32-bit ARGB color integer. `0x00000000` indicates no tint override. |
 | `0x10` | `progress` | `float` | 4 bytes | IEEE 754 single-precision float. Values $\ge 0.0$ activate loading bar. Negative values disable progress. |
@@ -146,7 +146,7 @@ When readability or extended attributes (such as notification text) are required
 | `priority` | | Integer | `0` | Arbitration priority. Higher integers win orthogonal channel conflicts. |
 | `base_shape`| `shape` | String / Int | `null` | Base pointer shape: `"default_arrow"`, `"precision_cross"`, `"reading_minimal"`. |
 | `tint_rgba` | `tint_argb`, `tint`| String / Int | `null` | Color tint in hex string or integer format. |
-| `badge_id` | `corner_badge`, `badge` | String / Int | `null` | Bottom-right quadrant sprite: `"none"`, `"mic_off"`, `"mic_on"`, `"tv_icon"`, `"vim_normal"`. |
+| `badge_id` | `corner_badge`, `badge` | String / Int | `null` | Bottom-right quadrant sprite: `"none"`, `"mic_off"`, `"mic_on"`, `"tv_icon"`, `"vim_normal"`, `"web_globe"`, `"code_brackets"`, `"terminal_prompt"`, `"doc_writing"`. |
 | `progress` | `progress_bar`, `progress_ratio` | Float | `null` | Normalized loading ratio between `0.0` and `1.0`. |
 | `ttl_ms` | | Integer | `0` | Ephemeral duration in milliseconds. Purged by timer if non-zero. |
 | `toast` | | Object / String | `null` | Ephemeral micro-notification text and display duration. |
@@ -299,7 +299,7 @@ python -m dynamic_cursor.client set [options]
 | `--priority` | Integer | `50` | Priority integer for arbitration. |
 | `--shape` | Choice | `None` | `default_arrow`, `precision_cross`, `reading_minimal`. |
 | `--tint` | String | `None` | Hex color string (e.g., `#FF5555` or `#44FF6680`). |
-| `--badge` | Choice | `None` | `none`, `mic_off`, `mic_on`, `tv_icon`, `vim_normal`. |
+| `--badge` | Choice | `None` | `none`, `mic_off`, `mic_on`, `tv_icon`, `vim_normal`, `web_globe`, `code_brackets`, `terminal_prompt`, `doc_writing`. |
 | `--progress` | Float | `None` | Progress ratio from `0.0` to `1.0`. |
 | `--ttl` | Integer | `0` | Time-to-live in milliseconds. |
 | `--binary` | Flag | `False` | Transmit using 32-byte packed binary format. |

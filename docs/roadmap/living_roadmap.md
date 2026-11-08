@@ -92,11 +92,16 @@ With the Phase 2 production native engine established, Phase 3 prioritizes visua
   - Solution: Extended `BitmapCompositor` with `kIBeamMask`, `kHandMask`, and `compute_hotspot()` to dynamically calculate exact click anchor points (`(7 * scale, 9 * scale)` for text carets, `(5 * scale, 0)` for link hands). Added `multi_slot_sync` to `HardwareCursorDriver` to propagate composite tints and status badges simultaneously across `OCR_NORMAL`, `OCR_IBEAM`, and `OCR_HAND`.
   - Verification: Verified in `tests/test_native_core.cpp` (Test 8) with hotspot geometry validation, dry-run multi-handle LRU caching, and seamless `SPI_SETCURSORS` restoration.
 
-- **Task 3.3: Per-Monitor DPI Scaling Awareness**
+- **Task 3.3: Procedural Badge Vocabulary Expansion (WebGlobe, CodeBrackets, TerminalPrompt, DocWriting)**
+  - Problem: External workspace context producers (such as the Active Desktop Context Engine and IDE context watchers) lacked semantic badges for browsers, code editors, terminals, and document authoring.
+  - Solution: Extended `BadgeId` (identifiers 5 to 8) and added procedural 16x16 ARGB rasterization routines in `BitmapCompositor::draw_badge()`. Implemented ocean blue globe with latitude and longitude grids (`WebGlobe`), slate tile with sky-blue chevrons (`CodeBrackets`), console tile with green prompt arrow and cursor bar (`TerminalPrompt`), and parchment sheet with folded dog-ear corner and ink lines (`DocWriting`).
+  - Verification: Verified protocol serialization in `tests/test_native_core.cpp` (Tests 1 and 9) and client feeder transmission in `tests/test_e2e_daemon.py`.
+
+- **Task 3.4: Per-Monitor DPI Scaling Awareness**
   - Investigate `CreateIconIndirect` bitmap scaling behavior across mixed DPI setups (such as 100% and 150% displays).
   - Handle `WM_DPICHANGED` messages to scale the hardware canvas dynamically between `64x64`, `96x96`, and `128x128` pixels based on active monitor scaling metrics.
 
-- **Task 3.4: Expanded Feeder Integrations**
+- **Task 3.5: Expanded Feeder Integrations**
   - Author reference feeder bridges for Active Desktop Context Engine, browser media playback status, and IDE background compilation watchers.
   - Provide minimal PowerShell and C# feeder client snippets.
 

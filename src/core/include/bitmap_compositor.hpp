@@ -592,6 +592,197 @@ inline void draw_badge(
             break;
         }
 
+        case BadgeId::WebGlobe: {
+            constexpr uint32_t kOceanBlue = 0xFF0288D1;
+            constexpr uint32_t kNavyBorder = 0xFF013A59;
+            constexpr uint32_t kGridLine = 0xFFE1F5FE;
+
+            for (int ry = 0; ry < 16; ++ry) {
+                for (int rx = 0; rx < 16; ++rx) {
+                    const float dx = static_cast<float>(rx) - 7.5f;
+                    const float dy = static_cast<float>(ry) - 7.5f;
+                    const float d2 = dx * dx + dy * dy;
+                    if (d2 <= 56.25f) {
+                        const uint32_t c = (d2 > 42.0f) ? kNavyBorder : kOceanBlue;
+                        detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, c);
+                    }
+                }
+            }
+
+            auto set_globe_pixel = [&](int rx, int ry) {
+                const float dx = static_cast<float>(rx) - 7.5f;
+                const float dy = static_cast<float>(ry) - 7.5f;
+                const float d2 = dx * dx + dy * dy;
+                if (d2 <= 42.0f) {
+                    detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, kGridLine);
+                }
+            };
+
+            // Horizontal equator: ry = 7, 8 (inside circle)
+            for (int rx = 0; rx < 16; ++rx) {
+                set_globe_pixel(rx, 7);
+                set_globe_pixel(rx, 8);
+            }
+
+            // Vertical central meridian: rx = 7, 8 (inside circle)
+            for (int ry = 0; ry < 16; ++ry) {
+                set_globe_pixel(7, ry);
+                set_globe_pixel(8, ry);
+            }
+
+            // Upper and lower latitude arcs: ry = 4 and ry = 11 (within circle radius)
+            for (int rx = 0; rx < 16; ++rx) {
+                set_globe_pixel(rx, 4);
+                set_globe_pixel(rx, 11);
+            }
+
+            // Curved longitude arcs: ellipse curvature rx = 4 and rx = 11 at equator, tapering inward
+            for (int ry = 2; ry <= 13; ++ry) {
+                int left_rx = 4;
+                int right_rx = 11;
+                if (ry <= 3 || ry >= 12) {
+                    left_rx = 6;
+                    right_rx = 9;
+                } else if (ry <= 5 || ry >= 10) {
+                    left_rx = 5;
+                    right_rx = 10;
+                }
+                set_globe_pixel(left_rx, ry);
+                set_globe_pixel(right_rx, ry);
+            }
+            break;
+        }
+
+        case BadgeId::CodeBrackets: {
+            constexpr uint32_t kSlateBg = 0xFF1E293B;
+            constexpr uint32_t kSkyBlue = 0xFF38BDF8;
+
+            // Clipped-corner 14x14 slate tile
+            for (int ry = 1; ry <= 14; ++ry) {
+                for (int rx = 1; rx <= 14; ++rx) {
+                    const bool corner = (rx == 1 || rx == 14) && (ry == 1 || ry == 14);
+                    if (corner) {
+                        continue;
+                    }
+                    const bool edge = (rx == 1 || rx == 14 || ry == 1 || ry == 14);
+                    const uint32_t c = edge ? kBlack : kSlateBg;
+                    detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, c);
+                }
+            }
+
+            // Left '<' chevron (rx = 3..6, ry = 5..10)
+            detail::set_pixel(buffer, width, height, x0 + 6, y0 + 5, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 5, y0 + 5, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 5, y0 + 6, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 4, y0 + 6, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 4, y0 + 7, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 3, y0 + 7, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 3, y0 + 8, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 4, y0 + 8, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 4, y0 + 9, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 5, y0 + 9, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 5, y0 + 10, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 6, y0 + 10, kSkyBlue);
+
+            // Right '>' chevron (rx = 9..12, ry = 5..10)
+            detail::set_pixel(buffer, width, height, x0 + 9, y0 + 5, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 10, y0 + 5, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 10, y0 + 6, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 11, y0 + 6, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 11, y0 + 7, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 12, y0 + 7, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 12, y0 + 8, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 11, y0 + 8, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 11, y0 + 9, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 10, y0 + 9, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 10, y0 + 10, kSkyBlue);
+            detail::set_pixel(buffer, width, height, x0 + 9, y0 + 10, kSkyBlue);
+            break;
+        }
+
+        case BadgeId::TerminalPrompt: {
+            constexpr uint32_t kConsoleBg = 0xFF0F172A;
+            constexpr uint32_t kTitleBar = 0xFF334155;
+            constexpr uint32_t kGreenPrompt = 0xFF4ADE80;
+
+            // Base console window with clipped corners
+            for (int ry = 1; ry <= 14; ++ry) {
+                for (int rx = 1; rx <= 14; ++rx) {
+                    const bool corner = (rx == 1 || rx == 14) && (ry == 1 || ry == 14);
+                    if (corner) {
+                        continue;
+                    }
+                    const bool edge = (rx == 1 || rx == 14 || ry == 1 || ry == 14);
+                    const uint32_t c = edge ? kBlack : kConsoleBg;
+                    detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, c);
+                }
+            }
+
+            // Top title bar: ry = 2..3
+            for (int ry = 2; ry <= 3; ++ry) {
+                for (int rx = 2; rx <= 13; ++rx) {
+                    detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, kTitleBar);
+                }
+            }
+
+            // Left '>' prompt arrow: rx = 4..6, ry = 6..10
+            detail::set_pixel(buffer, width, height, x0 + 4, y0 + 6, kGreenPrompt);
+            detail::set_pixel(buffer, width, height, x0 + 5, y0 + 7, kGreenPrompt);
+            detail::set_pixel(buffer, width, height, x0 + 6, y0 + 8, kGreenPrompt);
+            detail::set_pixel(buffer, width, height, x0 + 5, y0 + 9, kGreenPrompt);
+            detail::set_pixel(buffer, width, height, x0 + 4, y0 + 10, kGreenPrompt);
+            detail::set_pixel(buffer, width, height, x0 + 4, y0 + 7, kGreenPrompt);
+            detail::set_pixel(buffer, width, height, x0 + 5, y0 + 8, kGreenPrompt);
+            detail::set_pixel(buffer, width, height, x0 + 4, y0 + 9, kGreenPrompt);
+
+            // Bottom '_' cursor bar: rx = 8..11, ry = 10..11
+            for (int ry = 10; ry <= 11; ++ry) {
+                for (int rx = 8; rx <= 11; ++rx) {
+                    detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, kGreenPrompt);
+                }
+            }
+            break;
+        }
+
+        case BadgeId::DocWriting: {
+            constexpr uint32_t kPageBorder = 0xFF0F172A;
+            constexpr uint32_t kParchment = 0xFFF8FAFC;
+            constexpr uint32_t kFoldColor = 0xFF94A3B8;
+            constexpr uint32_t kInkLine = 0xFF334155;
+
+            // Document sheet: rx = 2..13, ry = 1..14
+            for (int ry = 1; ry <= 14; ++ry) {
+                for (int rx = 2; rx <= 13; ++rx) {
+                    const bool edge = (rx == 2 || rx == 13 || ry == 1 || ry == 14);
+                    detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, edge ? kPageBorder : kParchment);
+                }
+            }
+
+            // Folded top-right dog-ear corner (rx = 10..13, ry = 1..4)
+            for (int ry = 1; ry <= 4; ++ry) {
+                for (int rx = 10; rx <= 13; ++rx) {
+                    detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, kFoldColor);
+                }
+            }
+            // Dog-ear border outlines
+            for (int rx = 10; rx <= 13; ++rx) {
+                detail::set_pixel(buffer, width, height, x0 + rx, y0 + 1, kPageBorder);
+                detail::set_pixel(buffer, width, height, x0 + rx, y0 + 4, kPageBorder);
+            }
+            for (int ry = 1; ry <= 4; ++ry) {
+                detail::set_pixel(buffer, width, height, x0 + 10, y0 + ry, kPageBorder);
+                detail::set_pixel(buffer, width, height, x0 + 13, y0 + ry, kPageBorder);
+            }
+
+            // Four 1-pixel horizontal ink lines: ry = 6, 8, 10, 12, rx = 4..11
+            for (int ry : {6, 8, 10, 12}) {
+                for (int rx = 4; rx <= 11; ++rx) {
+                    detail::set_pixel(buffer, width, height, x0 + rx, y0 + ry, kInkLine);
+                }
+            }
+            break;
+        }
+
         case BadgeId::None:
         default:
             break;
