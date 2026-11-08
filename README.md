@@ -5,7 +5,7 @@
 
 **Dynamic Cursor** is an event-driven, hardware-accelerated Windows pointer compositor and visual state sink. Rather than coupling cursor logic to a single application, it acts as a generalized rendering daemon that any external tool can drive in real time over local IPC (`\\.\pipe\dynamic_cursor`).
 
-External feeders (such as an Active Desktop Context Engine, Caster voice recognition, browser media watchers, or build scripts) push visual state layers to the cursor. Dynamic Cursor arbitrates layer priorities, composites 32-bit ARGB bitmaps in memory, and renders shapes, color tints, corner badges, compact loading bars, and pop-out micro-notifications with zero polling loops and zero display stutter.
+Dynamic Cursor is fully standalone with no hard dependencies on external software. External feeders can push visual state layers to the cursor in real time. Dynamic Cursor arbitrates layer priorities, composites 32-bit ARGB bitmaps in memory, and renders shapes, color tints, corner badges, compact loading bars, and pop-out micro-notifications with zero polling loops and zero display stutter. For existing ecosystem integrations, jump to [Integrations](#integrations).
 
 ---
 
@@ -14,8 +14,8 @@ External feeders (such as an Active Desktop Context Engine, Caster voice recogni
 ```mermaid
 flowchart LR
     subgraph Feeders ["External Context Feeders"]
-        F1["Active Desktop Context Engine"]
-        F2["Caster Voice Feeder (caster_mic_feeder.py)"]
+        F1["Context / Workspace Watchers"]
+        F2["Voice / Mic State Feeders"]
         F3["CLI / Task Notifiers (cli_notify.py)"]
     end
 
@@ -131,9 +131,9 @@ from dynamic_cursor.client import DynamicCursorClient
 
 # Connect to the local cursor daemon
 with DynamicCursorClient() as client:
-    # Assert a listening microphone indicator
+    # Assert a listening microphone indicator (any producer can use any layer id)
     client.set_layer(
-        layer_id="caster_mic",
+        layer_id="mic_state",
         priority=80,
         base_shape="default_arrow",
         tint_rgba="#44FF66",
@@ -215,6 +215,19 @@ Run the safety scanner manually:
 ```pwsh
 python scripts/check_repo_safety.py
 ```
+
+---
+
+## Integrations
+
+Dynamic Cursor operates as a standalone daemon and does not require any of the projects below. These projects demonstrate external feeders that push visual state over the named pipe:
+
+| Project | Role | Description |
+| :--- | :--- | :--- |
+| [Caster Dynamic Cursor Plugin](https://github.com/amirf147/caster-plugins/tree/main/plugins/dynamic_cursor) | Voice Control / Mic States | Bridges speech recognition engine modes and microphone states to the cursor. A standalone reference implementation is provided in [`examples/caster_mic_feeder.py`](examples/caster_mic_feeder.py). |
+| [Active Desktop Context Engine (ADCE)](https://github.com/amirf147/active-desktop-context-engine) | Desktop Context Graph | Projects semantic focus zones, active window context, and container badges to the cursor. |
+
+To list your integration here, submit a pull request updating this table.
 
 ---
 
